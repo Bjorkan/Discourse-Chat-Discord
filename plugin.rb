@@ -29,7 +29,7 @@ end
 Rails.application.config.filter_parameters += %i[bot_token webhook_url discord_webhook_url]
 
 require_relative "lib/discord_chat_bridge/engine"
-require_relative "lib/discord_chat_bridge/errors"
+require_relative "lib/discord_chat_bridge/error"
 require "demon/base"
 require_relative "lib/discord_chat_bridge/gateway_demon"
 
