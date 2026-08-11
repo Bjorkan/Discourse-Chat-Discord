@@ -54,4 +54,16 @@ RSpec.describe DiscordChatBridge::Discord::Gateway do
 
     expect(gateway.send(:gateway_url)).to eq("wss://resume.discord.gg?v=10&encoding=json")
   end
+
+  it "rejects unsafe Gateway and resume URLs" do
+    gateway.instance_variable_set(
+      :@session,
+      { "session_id" => "session", "sequence" => 42, "resume_gateway_url" => "wss://example.test" },
+    )
+
+    expect { gateway.send(:gateway_url) }.to raise_error(
+      DiscordChatBridge::PermanentError,
+      "Discord returned an invalid Gateway URL",
+    )
+  end
 end

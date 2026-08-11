@@ -20,6 +20,11 @@ module DiscordChatBridge
           avatar_url: avatar_url,
           allowed_mentions: ALLOWED_MENTIONS,
         }.compact
+        webhook_token = mapping.webhook_token
+
+        # Finish all local preparation before entering the ambiguous-delivery window. Once the
+        # request starts, a lost response can no longer prove whether Discord accepted it.
+        JSON.generate(payload)
 
         message_mapping.update!(
           delivery_status: "ambiguous",
@@ -28,7 +33,7 @@ module DiscordChatBridge
         response =
           @client.execute_webhook(
             webhook_id: mapping.discord_webhook_id,
-            token: mapping.webhook_token,
+            token: webhook_token,
             payload: payload,
             files: files,
           )

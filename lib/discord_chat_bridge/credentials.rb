@@ -5,7 +5,8 @@ module DiscordChatBridge
     STORE_KEY = "encrypted_bot_token"
 
     def self.bot_token
-      return ENV["DISCORD_CHAT_BRIDGE_BOT_TOKEN"] if ENV["DISCORD_CHAT_BRIDGE_BOT_TOKEN"].present?
+      environment_token = ENV["DISCORD_CHAT_BRIDGE_BOT_TOKEN"].to_s.strip.presence
+      return environment_token if environment_token
 
       encrypted = PluginStore.get(PLUGIN_NAME, STORE_KEY)
       Encryption.decrypt(encrypted) if encrypted.present?
@@ -17,7 +18,7 @@ module DiscordChatBridge
     end
 
     def self.bot_token?
-      ENV["DISCORD_CHAT_BRIDGE_BOT_TOKEN"].present? ||
+      ENV["DISCORD_CHAT_BRIDGE_BOT_TOKEN"].to_s.strip.present? ||
         PluginStore.get(PLUGIN_NAME, STORE_KEY).present?
     end
   end

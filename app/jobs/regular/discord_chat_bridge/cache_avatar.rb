@@ -8,15 +8,13 @@ module Jobs
       def execute(args)
         identity = ::DiscordChatBridge::Identity.find_by(id: args[:identity_id])
         return if identity.blank? || identity.avatar_url.blank?
-        if ::DiscordChatBridge::Discord::AttachmentUrl::HOSTS.exclude?(
-             URI(identity.avatar_url).host,
-           )
-          return
-        end
+        avatar_url = args[:avatar_url].presence || identity.avatar_url
+        return unless identity.avatar_url == avatar_url
+        return unless ::DiscordChatBridge::Discord::AvatarUrl.valid?(avatar_url)
 
         tempfile =
           FileHelper.download(
-            identity.avatar_url,
+            avatar_url,
             max_file_size: 2.megabytes,
             tmp_file_name: "discord-avatar-#{identity.discord_user_id}",
             follow_redirect: false,
@@ -31,7 +29,10 @@ module Jobs
             "discord-avatar-#{identity.discord_user_id}.png",
             type: "avatar",
           ).create_for(::DiscordChatBridge::BRIDGE_USER_ID)
-        identity.update!(avatar_upload: upload) if upload.persisted?
+        if upload.persisted?
+          identity.reload
+          identity.update!(avatar_upload: upload) if identity.avatar_url == avatar_url
+        end
       ensure
         tempfile&.close!
       end

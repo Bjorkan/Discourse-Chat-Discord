@@ -15,6 +15,7 @@ RSpec.describe DiscordChatBridge::Discord::AttachmentUrl do
       https://user@cdn.discordapp.com/attachments/1/2/a.png
       https://cdn.discordapp.com:444/attachments/1/2/a.png
       https://cdn.discordapp.com/avatars/1/a.png
+      https://cdn.discordapp.com/attachments/1/2/a.png#ignored
     ]
 
     expect(urls).to all(satisfy { |url| !described_class.valid?(url) })

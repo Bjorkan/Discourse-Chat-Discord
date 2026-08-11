@@ -4,6 +4,7 @@ module DiscordChatBridge
   module Discord
     class RateLimiter
       GLOBAL_KEY = "discord_chat_bridge:rest:global"
+      MAX_BLOCKING_DELAY = 5
 
       def before_request(route_key)
         sleep_for_key(GLOBAL_KEY)
@@ -56,7 +57,13 @@ module DiscordChatBridge
 
       def sleep_for_key(key)
         ttl = Discourse.redis.pttl(key)
-        sleep(ttl / 1000.0) if ttl.positive?
+        return unless ttl.positive?
+
+        delay = ttl / 1000.0
+        if delay > MAX_BLOCKING_DELAY
+          raise RetryableError.new("Discord rate limit is still active", retry_after: delay)
+        end
+        sleep(delay)
       end
     end
   end

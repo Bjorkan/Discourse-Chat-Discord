@@ -17,13 +17,15 @@ module DiscordChatBridge
         return if message_mapping.deleted_on_discord_at.present?
 
         value = content
-        value =
-          "#{value.first(1940)}\n\n[Edited message truncated; Discord limit is 2000 characters]" if value.length >
-          2000
+        if Formatting.discord_length(value) > Formatting::DISCORD_CONTENT_LIMIT
+          suffix = "\n\n[Edited message truncated; Discord limit is 2000 characters]"
+          content_limit = Formatting::DISCORD_CONTENT_LIMIT - Formatting.discord_length(suffix)
+          value = "#{Formatting.truncate_for_discord(value, content_limit)}#{suffix}"
+        end
         current_upload_ids = message.upload_ids.sort
         attachments_changed =
           current_upload_ids != Array(message_mapping.discourse_upload_ids).map(&:to_i).sort
-        files = attachments_changed ? upload_files.first(10) : []
+        files = attachments_changed ? upload_files : []
         attachments =
           if attachments_changed
             files.each_with_index.map do |file, index|
@@ -32,6 +34,9 @@ module DiscordChatBridge
           else
             attachments_for_edit(message_mapping)
           end
+        if value.blank? && attachments.empty?
+          value = "(Discourse message contained no supported content)"
+        end
         payload = { content: value, allowed_mentions: ALLOWED_MENTIONS, attachments: attachments }
         digest = Formatting.digest(payload)
         return if message_mapping.payload_digest == digest
@@ -54,8 +59,10 @@ module DiscordChatBridge
         )
         mapping.record_success!
       rescue PermanentError => error
+        message_mapping&.update_columns(last_error: error.message.to_s.first(500))
         mapping&.record_error!(error)
       rescue => error
+        message_mapping&.update_columns(last_error: error.message.to_s.first(500))
         mapping&.record_error!(error)
         raise
       ensure

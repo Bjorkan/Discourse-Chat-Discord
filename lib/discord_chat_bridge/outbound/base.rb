@@ -3,7 +3,8 @@
 module DiscordChatBridge
   module Outbound
     class Base
-      ALLOWED_MENTIONS = { parse: [] }.freeze
+      ALLOWED_MENTIONS = { parse: [].freeze }.freeze
+      MAX_DISCORD_FILES = 10
 
       def initialize(chat_message_id, client: Discord::Client.new)
         @chat_message_id = chat_message_id
@@ -65,7 +66,7 @@ module DiscordChatBridge
       end
 
       def visible_name
-        (message.user.name.presence || message.user.username).to_s.first(80)
+        Formatting.truncate_for_discord(message.user.name.presence || message.user.username, 80)
       end
 
       def avatar_url
@@ -82,8 +83,13 @@ module DiscordChatBridge
 
       def prepare_content_and_files
         value = content
-        files = upload_files.first(10)
-        return value, files if value.length <= 2000
+        files = upload_files
+        if Formatting.discord_length(value) <= Formatting::DISCORD_CONTENT_LIMIT
+          if value.blank? && files.empty?
+            value = "(Discourse message contained no supported content)"
+          end
+          return value, files
+        end
 
         tempfile = Tempfile.new(%w[discourse-chat-message .txt])
         tempfile.binmode
@@ -96,38 +102,48 @@ module DiscordChatBridge
           content_type: "text/plain",
           temporary: true,
         }
-        ["#{value.first(1850)}\n\n[Full message attached as message.txt]", files]
+        suffix = "\n\n[Full message attached as message.txt]"
+        preview_limit = Formatting::DISCORD_CONTENT_LIMIT - Formatting.discord_length(suffix)
+        ["#{Formatting.truncate_for_discord(value, preview_limit)}#{suffix}", files]
       end
 
       def upload_files
         max_bytes = SiteSetting.discord_chat_bridge_max_attachment_mb.megabytes
-        message.uploads.filter_map do |upload|
-          next if upload.filesize.to_i > max_bytes
-          source_path =
-            Discourse.store.path_for(upload) ||
-              Discourse.store.download(upload, max_file_size_kb: max_bytes)
-          next if source_path.blank? || !File.file?(source_path)
+        message
+          .uploads
+          .each_with_object([]) do |upload, files|
+            break files if files.length >= MAX_DISCORD_FILES
+            next if upload.filesize.to_i > max_bytes
+            source_path =
+              Discourse.store.path_for(upload) ||
+                Discourse.store.download(
+                  upload,
+                  max_file_size_kb: (max_bytes / 1.kilobyte.to_f).ceil,
+                )
+            next if source_path.blank? || !File.file?(source_path)
 
-          tempfile = Tempfile.new(["discord-outbound", File.extname(upload.original_filename.to_s)])
-          tempfile.binmode
-          File.open(source_path, "rb") { |source| IO.copy_stream(source, tempfile, max_bytes + 1) }
-          if tempfile.size > max_bytes
-            tempfile.close!
-            next
+            tempfile =
+              Tempfile.new(["discord-outbound", File.extname(upload.original_filename.to_s)])
+            tempfile.binmode
+            File.open(source_path, "rb") do |source|
+              IO.copy_stream(source, tempfile, max_bytes + 1)
+            end
+            if tempfile.size > max_bytes
+              tempfile.close!
+              next
+            end
+            tempfile.rewind
+            files << {
+              io: tempfile,
+              filename: File.basename(upload.original_filename.to_s).presence || "attachment",
+              content_type: upload.content_type.presence || "application/octet-stream",
+              temporary: true,
+            }
+          rescue => error
+            Rails.logger.warn(
+              "#{Log.prefix(operation: "attachment", direction: "outbound", chat_message_id: message.id)} result=skipped error_class=#{error.class}",
+            )
           end
-          tempfile.rewind
-          {
-            io: tempfile,
-            filename: File.basename(upload.original_filename.to_s).presence || "attachment",
-            content_type: upload.content_type.presence || "application/octet-stream",
-            temporary: true,
-          }
-        rescue => error
-          Rails.logger.warn(
-            "#{Log.prefix(operation: "attachment", direction: "outbound", chat_message_id: message.id)} result=skipped error_class=#{error.class}",
-          )
-          nil
-        end
       end
 
       def cleanup_files(files)

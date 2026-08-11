@@ -41,6 +41,19 @@ RSpec.describe DiscordChatBridge::Discord::Client do
     end.to raise_error(DiscordChatBridge::AmbiguousDeliveryError)
   end
 
+  it "classifies webhook write timeouts and server errors as ambiguous" do
+    client.stubs(:perform).raises(Net::WriteTimeout)
+    expect do
+      client.execute_webhook(webhook_id: "123", token: "token", payload: { content: "hello" })
+    end.to raise_error(DiscordChatBridge::AmbiguousDeliveryError)
+
+    response = FakeResponse.new(code: "500", body: "{}", headers: {})
+    client.stubs(:perform).returns(response)
+    expect do
+      client.execute_webhook(webhook_id: "123", token: "token", payload: { content: "hello" })
+    end.to raise_error(DiscordChatBridge::AmbiguousDeliveryError)
+  end
+
   it "treats an already-deleted webhook message as success" do
     response = FakeResponse.new(code: "404", body: "{}", headers: {})
     client.stubs(:perform).returns(response)
@@ -48,5 +61,12 @@ RSpec.describe DiscordChatBridge::Discord::Client do
     expect(
       client.delete_webhook_message(webhook_id: "123", token: "token", message_id: "456"),
     ).to be_nil
+  end
+
+  it "rejects zero and oversized snowflakes before making a request" do
+    client.expects(:perform).never
+
+    expect { client.channel("0") }.to raise_error(ArgumentError, "invalid Discord snowflake")
+    expect { client.channel("1" * 21) }.to raise_error(ArgumentError, "invalid Discord snowflake")
   end
 end

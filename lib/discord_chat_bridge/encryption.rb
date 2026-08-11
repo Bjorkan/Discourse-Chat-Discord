@@ -10,6 +10,8 @@ module DiscordChatBridge
 
     def self.decrypt(value)
       encryptor.decrypt_and_verify(value, purpose: PURPOSE)
+    rescue ActiveSupport::MessageEncryptor::InvalidMessage
+      raise PermanentError, "Stored bridge credential could not be decrypted"
     end
 
     def self.encryptor

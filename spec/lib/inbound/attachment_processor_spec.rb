@@ -17,5 +17,9 @@ RSpec.describe DiscordChatBridge::Inbound::AttachmentProcessor do
 
     expect(result.markdown).not_to include("@admin", "@all", "\n")
     expect(result.upload_ids).to be_empty
+    expect(result.records.first).to include(
+      "filename" => "](@admin)\n@all.txt",
+      "markdown" => result.markdown,
+    )
   end
 end

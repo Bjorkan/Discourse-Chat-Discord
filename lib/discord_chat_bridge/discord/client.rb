@@ -9,6 +9,7 @@ module DiscordChatBridge
       API_BASE = "https://discord.com/api/v10"
       CONNECT_TIMEOUT = 5
       READ_TIMEOUT = 15
+      MAX_INLINE_RATE_LIMIT_DELAY = 5
 
       def initialize(token: Credentials.bot_token, rate_limiter: RateLimiter.new)
         @token = token
@@ -45,7 +46,7 @@ module DiscordChatBridge
           "/webhooks/#{snowflake!(webhook_id)}/#{webhook_token!(token)}?wait=true",
           payload:,
           files:,
-          ambiguous_on_timeout: true,
+          ambiguous_delivery: true,
         )
       end
 
@@ -75,7 +76,7 @@ module DiscordChatBridge
         files: [],
         auth: false,
         allow_not_found: false,
-        ambiguous_on_timeout: false
+        ambiguous_delivery: false
       )
         raise PermanentError, "Discord bot token is not configured" if auth && @token.blank?
 
@@ -96,7 +97,7 @@ module DiscordChatBridge
 
             if response.code.to_i == 429
               delay = @rate_limiter.rate_limited!(route_key, response, body || {})
-              if attempts < 3
+              if attempts < 3 && delay <= MAX_INLINE_RATE_LIMIT_DELAY
                 sleep(delay)
                 next
               end
@@ -104,16 +105,32 @@ module DiscordChatBridge
             end
 
             if response.code.to_i >= 500
+              if ambiguous_delivery
+                raise AmbiguousDeliveryError,
+                      "Discord may have accepted the webhook before returning HTTP #{response.code}"
+              end
               raise RetryableError, "Discord returned HTTP #{response.code}"
             end
 
             raise PermanentError,
                   "Discord returned HTTP #{response.code} (code #{body&.dig("code") || "unknown"})"
           end
-        rescue Net::OpenTimeout, Errno::ECONNREFUSED, SocketError => error
+        rescue Net::OpenTimeout,
+               Errno::ECONNREFUSED,
+               Errno::EHOSTUNREACH,
+               Errno::ENETUNREACH,
+               SocketError => error
           raise RetryableError, "Discord connection failed: #{error.class}"
-        rescue Net::ReadTimeout, EOFError => error
-          if ambiguous_on_timeout
+        rescue Net::ReadTimeout,
+               Net::WriteTimeout,
+               Net::HTTPBadResponse,
+               Net::ProtocolError,
+               OpenSSL::SSL::SSLError,
+               EOFError,
+               Errno::ECONNRESET,
+               Errno::EPIPE,
+               Errno::ETIMEDOUT => error
+          if ambiguous_delivery
             raise AmbiguousDeliveryError,
                   "Discord may have accepted the webhook request before #{error.class}"
           end
@@ -157,14 +174,17 @@ module DiscordChatBridge
 
       def parse_body(response)
         return nil if response.body.blank?
-        JSON.parse(response.body)
+        parsed = JSON.parse(response.body)
+        parsed.is_a?(Hash) ? parsed : {}
       rescue JSON::ParserError
         nil
       end
 
       def snowflake!(value)
         string = value.to_s
-        raise ArgumentError, "invalid Discord snowflake" unless string.match?(/\A\d+\z/)
+        unless string.match?(ChannelMapping::SNOWFLAKE_FORMAT)
+          raise ArgumentError, "invalid Discord snowflake"
+        end
         string
       end
 

@@ -4,7 +4,7 @@
 # about: Bidirectional Discord and Discourse Chat bridge with external identity presentation
 # version: 1.0.0
 # authors: Discourse Discord Chat Bridge contributors
-# url: https://github.com/example/discourse-discord-chat-bridge
+# url: https://github.com/Bjorkan/Discourse-Chat-Discord
 # required_version: 3.5.0
 
 gem "event_emitter", "0.2.6"
@@ -36,7 +36,8 @@ require_relative "lib/discord_chat_bridge/gateway_demon"
 register_demon_process DiscordChatBridge::GatewayDemon
 
 after_initialize do
-  register_seedfu_fixtures(Rails.root.join("plugins/discourse-discord-chat-bridge/db/fixtures"))
+  # Plugin directories can be renamed by an operator, so resolve fixtures relative to this file.
+  register_seedfu_fixtures(File.expand_path("db/fixtures", __dir__))
 
   %i[chat_message_created chat_message_edited chat_message_trashed].each do |event|
     on(event) do |message, _channel, _user, *_extra|

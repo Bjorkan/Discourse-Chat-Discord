@@ -53,6 +53,46 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     )
   end
 
+  it "reuses imported attachment state for a text-only edit" do
+    payload =
+      discord_payload(
+        "attachments" => [
+          {
+            "id" => "attachment-1",
+            "filename" => "notes.txt",
+            "content_type" => "text/plain",
+            "size" => 5,
+            "url" => "https://cdn.discordapp.com/attachments/1/2/notes.txt",
+          },
+        ],
+      )
+    processor = DiscordChatBridge::Inbound::AttachmentProcessor.any_instance
+    processor
+      .expects(:call)
+      .once
+      .returns(
+        DiscordChatBridge::Inbound::AttachmentProcessor::Result.new(
+          upload_ids: [],
+          markdown: "[notes.txt](https://cdn.discordapp.com/attachments/1/2/notes.txt)",
+          records: [
+            {
+              "id" => "attachment-1",
+              "filename" => "notes.txt",
+              "content_type" => "text/plain",
+              "size" => 5,
+              "upload_id" => nil,
+              "markdown" => "[notes.txt](https://cdn.discordapp.com/attachments/1/2/notes.txt)",
+            },
+          ],
+        ),
+      )
+
+    execute("MESSAGE_CREATE", payload, 1)
+    execute("MESSAGE_UPDATE", payload.merge("content" => "Edited text"), 2)
+
+    expect(DiscordChatBridge::MessageMapping.last.discord_attachments).to be_present
+  end
+
   it "fetches a full message for a partial update" do
     execute("MESSAGE_CREATE", discord_payload, 1)
     DiscordChatBridge::Discord::Client
@@ -88,6 +128,7 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
   it "ignores wrong channels, bots, own webhooks, and unsupported system messages" do
     execute("MESSAGE_CREATE", discord_payload(channel_id: "999"), 1)
     execute("MESSAGE_CREATE", discord_payload(:id => "101", "author" => { "bot" => true }), 2)
+    mapping.webhook_token = "webhook-token"
     mapping.update!(discord_webhook_id: "555")
     execute("MESSAGE_CREATE", discord_payload(:id => "102", "webhook_id" => "555"), 3)
     execute("MESSAGE_CREATE", discord_payload(:id => "103", "type" => 7), 4)

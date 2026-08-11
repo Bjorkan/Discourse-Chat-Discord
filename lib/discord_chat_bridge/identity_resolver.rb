@@ -14,6 +14,7 @@ module DiscordChatBridge
 
       identity = Identity.find_or_initialize_by(discord_user_id: user_id)
       avatar_changed = identity.avatar_hash != avatar_hash || identity.avatar_url != avatar_url
+      identity.avatar_upload = nil if avatar_changed
       identity.assign_attributes(
         discord_username: username,
         discord_global_name: author["global_name"],
@@ -25,7 +26,11 @@ module DiscordChatBridge
       identity.save!
 
       if avatar_changed && avatar_url.present?
-        Jobs.enqueue(Jobs::DiscordChatBridge::CacheAvatar, identity_id: identity.id)
+        Jobs.enqueue(
+          Jobs::DiscordChatBridge::CacheAvatar,
+          identity_id: identity.id,
+          avatar_url: avatar_url,
+        )
       end
       identity
     end

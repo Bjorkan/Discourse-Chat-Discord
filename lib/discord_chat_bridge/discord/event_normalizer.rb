@@ -27,11 +27,15 @@ module DiscordChatBridge
         return payload.slice("ids", "channel_id", "guild_id") if event_type == "MESSAGE_DELETE_BULK"
 
         normalized = payload.slice(*MESSAGE_KEYS)
-        normalized["author"] = payload["author"].slice(*AUTHOR_KEYS) if payload.key?("author")
-        normalized["member"] = payload["member"].slice(*MEMBER_KEYS) if payload.key?("member")
+        author = payload["author"]
+        member = payload["member"]
+        normalized.delete("author")
+        normalized.delete("member")
+        normalized["author"] = author.slice(*AUTHOR_KEYS) if author.is_a?(Hash)
+        normalized["member"] = member.slice(*MEMBER_KEYS) if member.is_a?(Hash)
         if payload.key?("attachments")
-          normalized["attachments"] = Array(payload["attachments"]).map do |item|
-            item.slice(*ATTACHMENT_KEYS)
+          normalized["attachments"] = Array(payload["attachments"]).filter_map do |item|
+            item.slice(*ATTACHMENT_KEYS) if item.is_a?(Hash)
           end
         end
         normalized

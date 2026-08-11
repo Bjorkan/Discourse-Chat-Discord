@@ -29,11 +29,14 @@ module DiscordChatBridge
         message_mapping.update!(
           deleted_on_discord_at: Time.zone.now,
           deleted_on_discourse_at: Time.zone.now,
+          last_error: nil,
         )
         channel_mapping.record_success!
       rescue PermanentError => error
+        message_mapping&.update_columns(last_error: error.message.to_s.first(500))
         channel_mapping&.record_error!(error)
       rescue => error
+        message_mapping&.update_columns(last_error: error.message.to_s.first(500))
         channel_mapping&.record_error!(error)
         raise
       end
