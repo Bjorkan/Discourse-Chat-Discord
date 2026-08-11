@@ -1,0 +1,138 @@
+.discord-chat-bridge-source {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 0.4em;
+  padding: 0.1em 0.42em;
+  border: 1px solid var(--primary-low-mid);
+  border-radius: 3px;
+  color: var(--primary-medium);
+  font-size: var(--font-down-2);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+}
+
+.discord-chat-bridge-author {
+  cursor: default;
+}
+
+.discord-chat-bridge-admin {
+  max-width: 1180px;
+}
+
+.discord-chat-bridge-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-block: 1.5rem 2rem;
+  overflow: hidden;
+  border: 1px solid var(--primary-low);
+  border-radius: var(--d-border-radius);
+  background: var(--primary-low);
+
+  > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 1rem;
+    background: var(--secondary);
+  }
+}
+
+.discord-chat-bridge-status__label,
+.discord-chat-bridge-secret__state {
+  color: var(--primary-medium);
+  font-size: var(--font-down-1);
+}
+
+.discord-chat-bridge-admin .is-healthy {
+  color: var(--success);
+}
+
+.discord-chat-bridge-admin .is-unhealthy {
+  color: var(--danger);
+}
+
+.discord-chat-bridge-section {
+  margin-block-start: 2.5rem;
+  padding-block-start: 1.5rem;
+  border-block-start: 1px solid var(--primary-low);
+
+  h3 {
+    margin-block: 0 1rem;
+  }
+}
+
+.discord-chat-bridge-runtime-controls,
+.discord-chat-bridge-secret .controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.discord-chat-bridge-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.discord-chat-bridge-secret {
+  margin-block-start: 1.5rem;
+
+  input {
+    width: min(34rem, 100%);
+    margin: 0;
+  }
+}
+
+.discord-chat-bridge-table-wrap {
+  overflow-x: auto;
+}
+
+.discord-chat-bridge-mappings {
+  width: 100%;
+
+  tr.is-disabled {
+    color: var(--primary-medium);
+  }
+}
+
+.discord-chat-bridge-mapping-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(9rem, 1fr));
+  gap: 1rem;
+  align-items: end;
+  margin-block-start: 1.5rem;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin: 0;
+    font-weight: 600;
+  }
+
+  input,
+  select {
+    width: 100%;
+    min-height: 2.35rem;
+    margin: 0;
+    box-sizing: border-box;
+  }
+}
+
+.discord-chat-bridge-mapping-form__webhook {
+  grid-column: span 3;
+}
+
+@media (width <= 850px) {
+  .discord-chat-bridge-status,
+  .discord-chat-bridge-mapping-form {
+    grid-template-columns: 1fr;
+  }
+
+  .discord-chat-bridge-mapping-form__webhook {
+    grid-column: auto;
+  }
+}

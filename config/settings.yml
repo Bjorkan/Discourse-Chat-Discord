@@ -1,0 +1,22 @@
+plugins:
+  discord_chat_bridge_enabled:
+    default: false
+    client: true
+  discord_chat_bridge_include_bot_messages:
+    default: false
+  discord_chat_bridge_include_other_webhooks:
+    default: false
+  discord_chat_bridge_max_attachment_mb:
+    default: 20
+    min: 1
+    max: 100
+  discord_chat_bridge_tombstone_retention_days:
+    default: 90
+    min: 7
+    max: 3650
+  discord_chat_bridge_avatar_fallback_url:
+    default: ""
+  discord_chat_bridge_public_base_url:
+    default: ""
+  discord_chat_bridge_gateway_autostart:
+    default: true

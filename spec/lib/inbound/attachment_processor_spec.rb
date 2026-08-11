@@ -1,0 +1,21 @@
+# frozen_string_literal: true
+
+RSpec.describe DiscordChatBridge::Inbound::AttachmentProcessor do
+  before { ensure_bridge_actor }
+
+  it "sanitizes untrusted filenames before generating fallback Markdown" do
+    result =
+      described_class.new.call(
+        [
+          {
+            "filename" => "](@admin)\n@all.txt",
+            "url" => "https://example.com/private",
+            "size" => 1,
+          },
+        ],
+      )
+
+    expect(result.markdown).not_to include("@admin", "@all", "\n")
+    expect(result.upload_ids).to be_empty
+  end
+end

@@ -1,0 +1,16 @@
+en:
+  site_settings:
+    discord_chat_bridge_enabled: "Enable the Discord to Discourse Chat bridge"
+    discord_chat_bridge_include_bot_messages: "Import messages from other Discord bots"
+    discord_chat_bridge_include_other_webhooks: "Import messages from Discord webhooks not owned by this bridge"
+    discord_chat_bridge_max_attachment_mb: "Hard download limit for each Discord attachment"
+    discord_chat_bridge_tombstone_retention_days: "Days to retain deleted message idempotency tombstones"
+    discord_chat_bridge_avatar_fallback_url: "Public fallback avatar URL for Discord webhook messages"
+    discord_chat_bridge_public_base_url: "Externally reachable Discourse base URL used for Discord avatars"
+    discord_chat_bridge_gateway_autostart: "Start the Discord Gateway demon with Discourse"
+  discord_chat_bridge:
+    admin:
+      title: "Discord Chat Bridge"
+    errors:
+      invalid_webhook_url: "The webhook URL must be an HTTPS Discord API webhook URL"
+      secret_key_missing: "secret_key_base is required to encrypt bridge credentials"
