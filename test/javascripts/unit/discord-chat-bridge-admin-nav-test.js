@@ -6,24 +6,24 @@ import {
 
 module("Discord Chat Bridge | admin navigation", function () {
   test("registers only when the admin plugin API is available", function (assert) {
-    let icon;
-    let navigation;
+    const icons = [];
+    const navigations = [];
     const api = {
       setAdminPluginIcon(pluginId, value) {
-        icon = { pluginId, value };
+        icons.push({ pluginId, value });
       },
       addAdminPluginConfigurationNav(pluginId, items) {
-        navigation = { pluginId, items };
+        navigations.push({ pluginId, items });
       },
     };
 
     assert.true(registerAdminNavigation(api));
-    assert.deepEqual(icon, {
-      pluginId: "discourse-discord-chat-bridge",
+    assert.deepEqual(icons[0], {
+      pluginId: "Discourse-Chat-Discord",
       value: "discord",
     });
     assert.strictEqual(
-      navigation.items[0].route,
+      navigations[0].items[0].route,
       "adminPlugins.show.discourse-discord-chat-bridge-control"
     );
     assert.false(registerAdminNavigation({}));

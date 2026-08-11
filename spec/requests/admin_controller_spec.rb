@@ -106,13 +106,12 @@ RSpec.describe DiscordChatBridge::AdminController do
 
   it "tests both the bot channel and webhook for an outbound mapping" do
     mapping =
-      Fabricate.build(
+      Fabricate(
         :discord_chat_bridge_channel_mapping,
         direction: "discourse_to_discord",
         discord_webhook_id: "123",
+        webhook_token: "webhook-token",
       )
-    mapping.webhook_token = "webhook-token"
-    mapping.save!
     client = DiscordChatBridge::Discord::Client.any_instance
     client.expects(:channel).returns(
       {

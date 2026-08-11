@@ -9,7 +9,7 @@ RSpec.describe "Discord Chat Bridge | admin page" do
   end
 
   it "loads the plugin configuration without a client error" do
-    visit "/admin/plugins/discourse-discord-chat-bridge/bridge"
+    visit "/admin/plugins/Discourse-Chat-Discord/bridge"
 
     expect(page).to have_css(".discord-chat-bridge-admin")
     expect(page).to have_content("Discord Chat Bridge")
