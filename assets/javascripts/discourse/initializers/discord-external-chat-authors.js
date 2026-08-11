@@ -52,11 +52,21 @@ export function decorateExternalAuthor(element) {
   });
 }
 
+export function registerExternalAuthorDecorator(api) {
+  if (typeof api.decorateChatMessage !== "function") {
+    return false;
+  }
+
+  api.decorateChatMessage(decorateExternalAuthor);
+  return true;
+}
+
 export default {
   name: "discord-external-chat-authors",
+  after: "chat-plugin-api",
 
   initialize() {
     retainExternalAuthorMetadata();
-    withPluginApi((api) => api.decorateChatMessage(decorateExternalAuthor));
+    withPluginApi(registerExternalAuthorDecorator);
   },
 };
