@@ -118,3 +118,35 @@ module DiscordChatBridge
     end
   end
 end
+
+# == Schema Information
+#
+# Table name: discord_chat_bridge_channel_mappings
+#
+#  id                              :bigint           not null, primary key
+#  activated_at                    :datetime         not null
+#  archived_at                     :datetime
+#  direction                       :string           default("bidirectional"), not null
+#  enabled                         :boolean          default(TRUE), not null
+#  encrypted_discord_webhook_token :text
+#  last_error_at                   :datetime
+#  last_error_code                 :string
+#  last_error_message              :text
+#  last_success_at                 :datetime
+#  created_at                      :datetime         not null
+#  updated_at                      :datetime         not null
+#  chat_channel_id                 :bigint           not null
+#  discord_channel_id              :string           not null
+#  discord_guild_id                :string           not null
+#  discord_webhook_id              :string
+#
+# Indexes
+#
+#  dcb_enabled_chat_channel_unique       (chat_channel_id) UNIQUE WHERE enabled
+#  dcb_enabled_discord_channel_unique    (discord_channel_id) UNIQUE WHERE enabled
+#  idx_on_discord_webhook_id_3d9633bb4a  (discord_webhook_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (chat_channel_id => chat_channels.id) ON DELETE => restrict
+#

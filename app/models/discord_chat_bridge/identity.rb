@@ -20,3 +20,28 @@ module DiscordChatBridge
     end
   end
 end
+
+# == Schema Information
+#
+# Table name: discord_chat_bridge_identities
+#
+#  id                  :bigint           not null, primary key
+#  avatar_hash         :string
+#  avatar_url          :text
+#  discord_global_name :string
+#  discord_username    :string           not null
+#  display_name        :string           not null
+#  last_synced_at      :datetime         not null
+#  created_at          :datetime         not null
+#  updated_at          :datetime         not null
+#  avatar_upload_id    :bigint
+#  discord_user_id     :string           not null
+#
+# Indexes
+#
+#  index_discord_chat_bridge_identities_on_discord_user_id  (discord_user_id) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (avatar_upload_id => uploads.id) ON DELETE => nullify
+#
