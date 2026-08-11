@@ -66,4 +66,24 @@ RSpec.describe DiscordChatBridge::Discord::Gateway do
       "Discord returned an invalid Gateway URL",
     )
   end
+
+  it "turns callback exceptions into a reconnect instead of stranding the Gateway" do
+    websocket = mock
+    websocket.expects(:close)
+    gateway.instance_variable_set(:@websocket, websocket)
+    gateway.instance_variable_set(:@mutex, Mutex.new)
+    gateway.instance_variable_set(:@condition, ConditionVariable.new)
+    gateway.instance_variable_set(:@closed, false)
+
+    gateway.send(:guard_callback, "message") { raise "Redis unavailable" }
+
+    expect(gateway.instance_variable_get(:@closed)).to eq(true)
+    expect(gateway.instance_variable_get(:@fatal_error)).to be_a(DiscordChatBridge::RetryableError)
+  end
+
+  it "does not let a health write failure mask shutdown" do
+    DiscordChatBridge::Health.expects(:update_gateway).raises("Redis unavailable")
+
+    expect { gateway.send(:safely_mark_disconnected) }.not_to raise_error
+  end
 end

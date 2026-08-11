@@ -236,6 +236,25 @@ export default class DiscordChatBridgeAdmin extends Component {
         @descriptionLabel={{i18n "discord_chat_bridge.admin.description"}}
       />
 
+      {{#unless this.state.integration.chat_enabled}}
+        <div class="alert alert-error" role="alert">
+          {{i18n "discord_chat_bridge.admin.chat_disabled_error"}}
+        </div>
+      {{/unless}}
+
+      {{#unless this.state.integration.compatible}}
+        <div class="alert alert-error" role="alert">
+          <strong>{{i18n
+              "discord_chat_bridge.admin.incompatible_error"
+            }}</strong>
+          <ul>
+            {{#each this.state.integration.missing_constants as |name|}}
+              <li><code>{{name}}</code></li>
+            {{/each}}
+          </ul>
+        </div>
+      {{/unless}}
+
       <div class="discord-chat-bridge-status" aria-live="polite">
         <div>
           <span class="discord-chat-bridge-status__label">{{i18n

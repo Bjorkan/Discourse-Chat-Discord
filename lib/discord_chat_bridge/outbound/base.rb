@@ -118,7 +118,8 @@ module DiscordChatBridge
               Discourse.store.path_for(upload) ||
                 Discourse.store.download(
                   upload,
-                  max_file_size_kb: (max_bytes / 1.kilobyte.to_f).ceil,
+                  # Despite its historical name, this Discourse API expects a byte count.
+                  max_file_size_kb: max_bytes,
                 )
             next if source_path.blank? || !File.file?(source_path)
 

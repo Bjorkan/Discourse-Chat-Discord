@@ -42,7 +42,9 @@ after_initialize do
   %i[chat_message_created chat_message_edited chat_message_trashed].each do |event|
     on(event) do |message, _channel, _user, *_extra|
       next unless SiteSetting.discord_chat_bridge_enabled
+      next unless DiscordChatBridge::DiscourseIntegration.compatible?
       next if message.blank?
+      next if message.user_id == DiscordChatBridge::BRIDGE_USER_ID
 
       operation =
         case event
@@ -66,15 +68,7 @@ after_initialize do
     end
   end
 
-  reloadable_patch do
-    Chat::Message.prepend DiscordChatBridge::ChatMessageExtension
-    Chat::MessageSerializer.prepend DiscordChatBridge::MessageSerializerExtension
-    Chat::InReplyToSerializer.prepend DiscordChatBridge::InReplyToSerializerExtension
-    Chat::ThreadOriginalMessageSerializer.prepend(
-      DiscordChatBridge::ThreadOriginalMessageSerializerExtension,
-    )
-    Chat::ThreadPreviewSerializer.prepend(DiscordChatBridge::ThreadPreviewSerializerExtension)
-  end
+  reloadable_patch { DiscordChatBridge::DiscourseIntegration.install_patches }
 
   Discourse::Application.routes.append do
     mount ::DiscordChatBridge::Engine, at: "/discord-chat-bridge"

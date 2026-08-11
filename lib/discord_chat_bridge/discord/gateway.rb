@@ -29,7 +29,7 @@ module DiscordChatBridge
           @backoff = [@backoff * 2, 60].min
         end
       ensure
-        mark_disconnected
+        safely_mark_disconnected
       end
 
       private
@@ -86,12 +86,22 @@ module DiscordChatBridge
       end
 
       def register_callbacks(websocket)
-        websocket.on(:message) { |event| handle_frame(event) }
-        websocket.on(:error) { |event| handle_error(event) }
-        websocket.on(:close) { |event| handle_close(event) }
+        websocket.on(:message) { |event| guard_callback("message") { handle_frame(event) } }
+        websocket.on(:error) { |event| guard_callback("error") { handle_error(event) } }
+        websocket.on(:close) { |event| guard_callback("close") { handle_close(event) } }
         websocket.on(:open) do
-          Health.update_gateway(connected: true, connecting: false, last_error: nil)
+          guard_callback("open") do
+            Health.update_gateway(connected: true, connecting: false, last_error: nil)
+          end
         end
+      end
+
+      # websocket-client-simple invokes these blocks on its own threads. An exception escaping a
+      # callback would otherwise kill only that thread and leave the demon waiting forever.
+      def guard_callback(source)
+        yield
+      rescue => error
+        fail_connection(error, source:)
       end
 
       def handle_frame(event)
@@ -222,6 +232,8 @@ module DiscordChatBridge
               sleep(interval)
               reconnect_if_requested
             end
+          rescue => error
+            fail_connection(error, source: "heartbeat")
           end
       end
 
@@ -235,6 +247,8 @@ module DiscordChatBridge
                 break
               end
             end
+          rescue => error
+            fail_connection(error, source: "lease_watchdog")
           end
       end
 
@@ -334,6 +348,29 @@ module DiscordChatBridge
         end
       end
 
+      def fail_connection(error, source:)
+        failure =
+          if error.is_a?(PermanentError) || error.is_a?(RetryableError)
+            error
+          else
+            RetryableError.new("Discord Gateway #{source} failed: #{error.class}")
+          end
+        @mutex.synchronize do
+          @fatal_error ||= failure
+          @closed = true
+          @condition.broadcast
+        end
+        Rails.logger.warn(
+          "#{Log.prefix(operation: source, direction: "gateway")} " \
+            "result=connection_failed error_class=#{error.class}",
+        )
+        @websocket&.close
+      rescue StandardError
+        # The failure state is set before logging and closing, so secondary cleanup errors cannot
+        # strand the main connection loop.
+        nil
+      end
+
       def reconnect_if_requested
         current = Discourse.redis.get(Health::RECONNECT_KEY)
         return if current.blank? || current == @last_reconnect_request
@@ -355,8 +392,13 @@ module DiscordChatBridge
         end
       end
 
-      def mark_disconnected
+      def safely_mark_disconnected
         Health.update_gateway(connected: false, connecting: false)
+      rescue => error
+        Rails.logger.warn(
+          "#{Log.prefix(operation: "health", direction: "gateway")} " \
+            "result=update_failed error_class=#{error.class}",
+        )
       end
     end
   end

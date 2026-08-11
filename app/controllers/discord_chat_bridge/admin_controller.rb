@@ -9,8 +9,10 @@ module DiscordChatBridge
     end
 
     def credentials
-      Credentials.bot_token = params[:bot_token] if params[:bot_token].present?
+      token_updated = params[:bot_token].present?
+      Credentials.bot_token = params[:bot_token] if token_updated
       SiteSetting.discord_chat_bridge_enabled = params[:enabled] if params.key?(:enabled)
+      Health.request_reconnect! if token_updated || params.key?(:enabled)
       render json: status_payload
     end
 
@@ -22,6 +24,12 @@ module DiscordChatBridge
         end
         channel = Discord::Client.new.channel(mapping.discord_channel_id)
         validate_remote_guild!(channel, mapping)
+        if mapping.outbound?
+          unless mapping.webhook_configured?
+            raise ArgumentError, "Discord webhook is not configured"
+          end
+          validate_remote_webhook!(mapping)
+        end
         render json: { ok: true, channel: { id: channel["id"], name: channel["name"] } }
         return
       end
@@ -90,6 +98,11 @@ module DiscordChatBridge
         enabled: SiteSetting.discord_chat_bridge_enabled,
         token_present: Credentials.bot_token?,
         token_managed_by_environment: ENV["DISCORD_CHAT_BRIDGE_BOT_TOKEN"].to_s.strip.present?,
+        integration: {
+          compatible: DiscourseIntegration.compatible?,
+          chat_enabled: SiteSetting.chat_enabled,
+          missing_constants: DiscourseIntegration.missing_constants,
+        },
         gateway:
           gateway.slice(
             "connected",

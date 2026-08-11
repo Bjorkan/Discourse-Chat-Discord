@@ -2,6 +2,8 @@
 
 module DiscordChatBridge
   class GatewayDemon < ::Demon::Base
+    MAPPING_CHECK_INTERVAL = 15
+
     def self.prefix
       "discord_chat_bridge_gateway"
     end
@@ -20,46 +22,78 @@ module DiscordChatBridge
       Signal.trap("INT") { @stopping = true }
 
       until @stopping
-        unless runnable?
-          Health.update_gateway(connected: false, connecting: false, waiting: true, fatal: false)
-          wait_until_stopping(5)
-          next
-        end
-
-        lease = Discord::LeaderLease.new
-        unless lease.acquire
-          Health.update_gateway(standby_seen_at: Time.zone.now.iso8601)
-          wait_until_stopping(10)
-          next
-        end
-
-        restart_delay = nil
         begin
-          Health.update_gateway(connecting: true, standby: false, waiting: false, fatal: false)
-          Discord::Gateway.new(
-            stop_requested: -> { @stopping || !runnable? },
-            lease_lost: -> { lease.lost },
-          ).run
-        rescue PermanentError => error
-          Health.update_gateway(connected: false, last_error: error.message, fatal: true)
-          Rails.logger.error(
-            "#{Log.prefix(operation: "run", direction: "gateway")} result=fatal error_class=#{error.class}",
-          )
-          restart_delay = 60
+          run_cycle
         rescue => error
-          Health.update_gateway(connected: false, last_error: error.class.name, fatal: false)
-          Rails.logger.warn(
-            "#{Log.prefix(operation: "run", direction: "gateway")} result=restarting error_class=#{error.class}",
+          safe_health_update(
+            connected: false,
+            connecting: false,
+            last_error: error.class.name,
+            fatal: false,
           )
-          restart_delay = 5
-        ensure
-          lease.release
+          Rails.logger.warn(
+            "#{Log.prefix(operation: "cycle", direction: "gateway")} " \
+              "result=restarting error_class=#{error.class}",
+          )
+          wait_until_stopping(5)
         end
-        wait_until_stopping(restart_delay) if restart_delay
       end
     end
 
     private
+
+    def run_cycle
+      unless runnable?
+        Health.update_gateway(
+          connected: false,
+          connecting: false,
+          standby: false,
+          waiting: true,
+          fatal: false,
+        )
+        wait_until_stopping(5)
+        return
+      end
+
+      lease = Discord::LeaderLease.new
+      unless lease.acquire
+        Health.update_gateway(standby_seen_at: Time.zone.now.iso8601)
+        wait_until_stopping(10)
+        return
+      end
+
+      restart_delay = nil
+      begin
+        Health.update_gateway(connecting: true, standby: false, waiting: false, fatal: false)
+        Discord::Gateway.new(
+          stop_requested: -> { @stopping || !runnable? },
+          lease_lost: -> { lease.lost },
+        ).run
+      rescue PermanentError => error
+        Health.update_gateway(connected: false, last_error: error.message, fatal: true)
+        Rails.logger.error(
+          "#{Log.prefix(operation: "run", direction: "gateway")} " \
+            "result=fatal error_class=#{error.class}",
+        )
+        restart_delay = 60
+      rescue => error
+        Health.update_gateway(connected: false, last_error: error.class.name, fatal: false)
+        Rails.logger.warn(
+          "#{Log.prefix(operation: "run", direction: "gateway")} " \
+            "result=restarting error_class=#{error.class}",
+        )
+        restart_delay = 5
+      ensure
+        lease.release
+      end
+      wait_until_stopping(restart_delay) if restart_delay
+    end
+
+    def safe_health_update(**values)
+      Health.update_gateway(**values)
+    rescue StandardError
+      nil
+    end
 
     def wait_until_stopping(seconds)
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + seconds
@@ -72,9 +106,18 @@ module DiscordChatBridge
     end
 
     def runnable?
-      SiteSetting.discord_chat_bridge_enabled &&
+      SiteSetting.chat_enabled && SiteSetting.discord_chat_bridge_enabled &&
         SiteSetting.discord_chat_bridge_gateway_autostart && Credentials.bot_token? &&
-        ChannelMapping.active.any?(&:inbound?)
+        DiscourseIntegration.compatible? && inbound_mapping?
+    end
+
+    def inbound_mapping?
+      now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      if @mapping_check_expires_at.blank? || now >= @mapping_check_expires_at
+        @has_inbound_mapping = ChannelMapping.active.any?(&:inbound?)
+        @mapping_check_expires_at = now + MAPPING_CHECK_INTERVAL
+      end
+      @has_inbound_mapping
     end
   end
 end

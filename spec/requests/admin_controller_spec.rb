@@ -23,6 +23,16 @@ RSpec.describe DiscordChatBridge::AdminController do
     expect(response.body).not_to include("super-secret-bot-token", "super-secret-webhook-token")
     expect(response.parsed_body["token_present"]).to eq(true)
     expect(response.parsed_body["mappings"].first["webhook_configured"]).to eq(true)
+    expect(response.parsed_body.dig("integration", "compatible")).to eq(true)
+    expect(response.parsed_body.dig("integration", "missing_constants")).to eq([])
+  end
+
+  it "requests a Gateway reconnect when runtime credentials change" do
+    DiscordChatBridge::Health.expects(:request_reconnect!)
+
+    put "/discord-chat-bridge/admin/credentials.json", params: { bot_token: "new-token" }
+
+    expect(response.status).to eq(200)
   end
 
   it "rejects non-staff access" do
@@ -92,5 +102,31 @@ RSpec.describe DiscordChatBridge::AdminController do
     expect(response.parsed_body["errors"]).to include(
       "Discord channel belongs to a different guild",
     )
+  end
+
+  it "tests both the bot channel and webhook for an outbound mapping" do
+    mapping =
+      Fabricate.build(
+        :discord_chat_bridge_channel_mapping,
+        direction: "discourse_to_discord",
+        discord_webhook_id: "123",
+      )
+    mapping.webhook_token = "webhook-token"
+    mapping.save!
+    client = DiscordChatBridge::Discord::Client.any_instance
+    client.expects(:channel).returns(
+      {
+        "id" => mapping.discord_channel_id,
+        "guild_id" => mapping.discord_guild_id,
+        "name" => "general",
+      },
+    )
+    client.expects(:webhook).returns(
+      { "channel_id" => mapping.discord_channel_id, "guild_id" => mapping.discord_guild_id },
+    )
+
+    post "/discord-chat-bridge/admin/test.json", params: { mapping_id: mapping.id }
+
+    expect(response.status).to eq(200)
   end
 end

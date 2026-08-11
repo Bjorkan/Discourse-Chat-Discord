@@ -5,10 +5,10 @@ module DiscordChatBridge
     engine_name PLUGIN_NAME
     isolate_namespace DiscordChatBridge
 
-    config.autoload_paths << root.join("lib")
-    config.eager_load_paths << root.join("lib")
-
-    jobs_glob = root.join("app/jobs/**/*.rb")
-    config.to_prepare { Dir[jobs_glob].each { |file| require_dependency file } }
+    config.autoload_paths << File.join(config.root, "lib")
+    scheduled_job_dir = File.join(config.root, "app/jobs/scheduled")
+    config.to_prepare do
+      Rails.autoloaders.main.eager_load_dir(scheduled_job_dir) if Dir.exist?(scheduled_job_dir)
+    end
   end
 end

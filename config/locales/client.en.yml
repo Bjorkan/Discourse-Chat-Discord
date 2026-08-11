@@ -43,6 +43,8 @@ en:
         no_mappings: "No mappings yet. Add one below; synchronization begins only after activation."
         token_configured: "Token configured"
         token_missing: "Token missing"
+        chat_disabled_error: "Discourse Chat is disabled. Enable Chat before starting the bridge."
+        incompatible_error: "This Discourse version is missing required Chat integration points. The bridge is paused to protect the forum:"
         directions:
           bidirectional: "Bidirectional"
           discord_to_discourse: "Discord to Discourse"
