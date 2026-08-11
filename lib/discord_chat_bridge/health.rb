@@ -5,6 +5,25 @@ module DiscordChatBridge
     KEY = "discord_chat_bridge:gateway:health"
     SESSION_KEY = "discord_chat_bridge:gateway:session"
     RECONNECT_KEY = "discord_chat_bridge:gateway:reconnect"
+    UPDATE_SCRIPT = <<~LUA
+      local current = {}
+      local existing = redis.call('get', KEYS[1])
+      if existing then
+        local decoded_ok, decoded = pcall(cjson.decode, existing)
+        if decoded_ok and type(decoded) == 'table' then
+          current = decoded
+        end
+      end
+
+      local updates = cjson.decode(ARGV[1])
+      for key, value in pairs(updates) do
+        current[key] = value
+      end
+
+      local encoded = cjson.encode(current)
+      redis.call('set', KEYS[1], encoded, 'EX', ARGV[2])
+      return encoded
+    LUA
 
     def self.gateway
       JSON.parse(Discourse.redis.get(KEY) || "{}")
@@ -13,9 +32,14 @@ module DiscordChatBridge
     end
 
     def self.update_gateway(**values)
-      current = gateway.merge(values.stringify_keys).merge("updated_at" => Time.zone.now.iso8601)
-      Discourse.redis.set(KEY, JSON.generate(current), ex: 5.minutes.to_i)
-      current
+      updates = values.stringify_keys.merge("updated_at" => Time.zone.now.iso8601)
+      encoded =
+        Discourse.redis.eval(
+          UPDATE_SCRIPT,
+          keys: [KEY],
+          argv: [JSON.generate(updates), 5.minutes.to_i],
+        )
+      JSON.parse(encoded)
     end
 
     def self.session

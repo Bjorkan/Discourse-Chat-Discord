@@ -99,4 +99,17 @@ RSpec.describe DiscordChatBridge::Outbound::CreateMessage do
 
     described_class.new(reply.id, client:).call
   end
+
+  it "keeps emoji-heavy previews within Discord's UTF-16 limit" do
+    message.update!(message: "😀" * 1_200)
+    client
+      .expects(:execute_webhook)
+      .with do |args|
+        DiscordChatBridge::Formatting.discord_length(args.dig(:payload, :content)) <= 2_000 &&
+          args[:files].any? { |file| file[:filename] == "message.txt" }
+      end
+      .returns({ "id" => "603", "attachments" => [] })
+
+    described_class.new(message.id, client:).call
+  end
 end

@@ -42,6 +42,7 @@ RSpec.describe DiscordChatBridge::MessageSerializerExtension do
 
   it "leaves local Discourse messages unchanged" do
     message = Fabricate(:chat_message)
+    DiscordChatBridge::MessageMapping.expects(:includes).never
     json = Chat::MessageSerializer.new(message, root: false, scope: Guardian.new(viewer)).as_json
 
     expect(json).not_to have_key(:external_author)

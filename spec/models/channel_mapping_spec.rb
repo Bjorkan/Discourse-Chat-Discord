@@ -47,4 +47,26 @@ RSpec.describe DiscordChatBridge::ChannelMapping do
     expect(mapping).to be_valid
     expect(mapping.encrypted_discord_webhook_token).not_to include("secret-token")
   end
+
+  it "rejects invalid Discord identifiers and missing activation timestamps" do
+    mapping = Fabricate.build(:discord_chat_bridge_channel_mapping)
+    mapping.discord_channel_id = "not-a-snowflake"
+    mapping.activated_at = nil
+
+    expect(mapping).not_to be_valid
+    expect(mapping.errors[:discord_channel_id]).to be_present
+    expect(mapping.errors[:activated_at]).to be_present
+  end
+
+  it "keeps channel endpoints immutable after messages have been bridged" do
+    mapping = Fabricate(:discord_chat_bridge_channel_mapping)
+    Fabricate(:discord_chat_bridge_message_mapping, channel_mapping: mapping)
+
+    mapping.discord_channel_id = "987654321"
+
+    expect(mapping).not_to be_valid
+    expect(mapping.errors[:base]).to include(
+      "Channel endpoints cannot be changed after messages have been bridged; create a new mapping",
+    )
+  end
 end

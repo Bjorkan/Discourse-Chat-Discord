@@ -103,7 +103,7 @@ hooks:
     - exec:
         cd: $home/plugins
         cmd:
-          - git clone https://github.com/your-org/discourse-discord-chat-bridge.git
+          - git clone https://github.com/Bjorkan/Discourse-Chat-Discord.git discourse-discord-chat-bridge
 ```
 
 Rebuild the container:

@@ -20,4 +20,16 @@ RSpec.describe DiscordChatBridge::Discord::EventNormalizer do
     expect(result).not_to have_key("author")
     expect(result).not_to have_key("attachments")
   end
+
+  it "drops malformed nested objects instead of crashing the Gateway callback" do
+    result =
+      described_class.call(
+        "MESSAGE_CREATE",
+        discord_payload("author" => nil, "member" => "invalid", "attachments" => [nil, 1]),
+      )
+
+    expect(result).not_to have_key("author")
+    expect(result).not_to have_key("member")
+    expect(result["attachments"]).to eq([])
+  end
 end

@@ -6,13 +6,29 @@ RSpec.describe DiscordChatBridge::Formatting do
       result = described_class.discord_to_discourse("@admin @all @here <@123> <@&456>")
 
       expect(result).not_to include("@admin", "@all", "@here")
-      expect(result).to include("\uFF20admin", "\uFF20user-123", "\uFF20role-456")
+      expect(result).to include("＠admin", "＠user-123", "＠role-456")
     end
 
     it "converts Discord spoilers without disturbing markdown" do
       expect(described_class.discord_to_discourse("**bold** ||secret||")).to eq(
         "**bold** [spoiler]secret[/spoiler]",
       )
+    end
+  end
+
+  describe "Discord length handling" do
+    it "counts and truncates by UTF-16 code units" do
+      expect(described_class.discord_length("a😀")).to eq(3)
+      expect(described_class.truncate_for_discord("😀😀", 3)).to eq("😀")
+    end
+  end
+
+  describe ".digest" do
+    it "is stable when nested hash insertion order changes" do
+      first = { outer: { "b" => 2, "a" => 1 } }
+      second = { "outer" => { "a" => 1, "b" => 2 } }
+
+      expect(described_class.digest(first)).to eq(described_class.digest(second))
     end
   end
 end

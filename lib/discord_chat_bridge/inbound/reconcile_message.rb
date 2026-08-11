@@ -99,6 +99,7 @@ module DiscordChatBridge
             )
           return if reservation.chat_message_id.present? || state.reload.discord_deleted_at
 
+          previous_mapping = Thread.current[:discord_chat_bridge_mapping]
           Thread.current[:discord_chat_bridge_mapping] = reservation
           begin
             message =
@@ -111,12 +112,14 @@ module DiscordChatBridge
                 enforce_membership: true,
               )
           ensure
-            Thread.current[:discord_chat_bridge_mapping] = nil
+            Thread.current[:discord_chat_bridge_mapping] = previous_mapping
           end
           reservation.update!(
             chat_message: message,
             delivery_status: "delivered",
             payload_digest: Formatting.digest(payload),
+            discord_attachments: attachment_result.records,
+            discourse_upload_ids: attachment_result.upload_ids,
           )
         end
       end
@@ -128,7 +131,9 @@ module DiscordChatBridge
         digest = Formatting.digest(payload)
         return if message_mapping.payload_digest == digest
 
-        attachment_result = AttachmentProcessor.new.call(payload["attachments"])
+        attachment_result =
+          cached_attachment_result(message_mapping, payload["attachments"]) ||
+            AttachmentProcessor.new.call(payload["attachments"])
         raw = build_raw(payload["content"], attachment_result.markdown)
         actor = User.find(BRIDGE_USER_ID)
         Chat::UpdateMessage.call!(
@@ -147,6 +152,8 @@ module DiscordChatBridge
           author_avatar_url: identity.avatar_template,
           discord_last_edited_at: parse_time(payload["edited_timestamp"]) || Time.zone.now,
           payload_digest: digest,
+          discord_attachments: attachment_result.records,
+          discourse_upload_ids: attachment_result.upload_ids,
         )
       rescue Service::Base::Failure => error
         raise PermanentError, "Discourse rejected Discord edit: #{error.context}"
@@ -190,6 +197,23 @@ module DiscordChatBridge
         raw = parts.join("\n\n")
         raw = "(Discord message contained no supported content)" if raw.blank?
         raw.first(SiteSetting.chat_maximum_message_length)
+      end
+
+      def cached_attachment_result(message_mapping, attachments)
+        records = Array(message_mapping.discord_attachments)
+        unless AttachmentProcessor.signature(records) == AttachmentProcessor.signature(attachments)
+          return
+        end
+
+        upload_ids = records.filter_map { |record| record["upload_id"] }.map(&:to_i).uniq
+        return if upload_ids.any?(&:zero?)
+        return unless Upload.where(id: upload_ids).count == upload_ids.length
+
+        AttachmentProcessor::Result.new(
+          upload_ids:,
+          markdown: records.filter_map { |record| record["markdown"].presence }.join("\n"),
+          records:,
+        )
       end
 
       def parse_time(value)

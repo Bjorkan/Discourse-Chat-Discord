@@ -7,7 +7,7 @@ module DiscordChatBridge
 
       def self.accept?(payload, mapping)
         return false unless mapping&.inbound?
-        return false if SUPPORTED_MESSAGE_TYPES.exclude?(payload["type"].to_i)
+        return false if SUPPORTED_MESSAGE_TYPES.exclude?(payload["type"])
 
         webhook_id = payload["webhook_id"].to_s
         if webhook_id.present? &&

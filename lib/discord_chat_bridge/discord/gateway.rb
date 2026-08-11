@@ -25,7 +25,7 @@ module DiscordChatBridge
         until stopping?
           connect_once
           break if stopping?
-          sleep(@backoff + rand * [@backoff * 0.25, 2].min)
+          wait_until_stopping(@backoff + rand * [@backoff * 0.25, 2].min)
           @backoff = [@backoff * 2, 60].min
         end
       ensure
@@ -282,8 +282,15 @@ module DiscordChatBridge
             @client.gateway_bot.fetch("url")
           end
         uri = URI(base)
+        valid_host = uri.host == "gateway.discord.gg" || uri.host&.end_with?(".discord.gg")
+        unless uri.scheme == "wss" && valid_host && uri.userinfo.nil? && uri.port == 443 &&
+                 uri.fragment.nil?
+          raise PermanentError, "Discord returned an invalid Gateway URL"
+        end
         uri.query = URI.encode_www_form(v: VERSION, encoding: "json")
         uri.to_s
+      rescue URI::InvalidURIError
+        raise PermanentError, "Discord returned an invalid Gateway URL"
       end
 
       def resumable?
@@ -336,6 +343,16 @@ module DiscordChatBridge
 
       def stopping?
         @stop_requested.call || @lease_lost.call
+      end
+
+      def wait_until_stopping(seconds)
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + seconds
+        until stopping?
+          remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          break unless remaining.positive?
+
+          sleep([remaining, 0.25].min)
+        end
       end
 
       def mark_disconnected

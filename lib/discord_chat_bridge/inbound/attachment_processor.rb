@@ -3,7 +3,12 @@
 module DiscordChatBridge
   module Inbound
     class AttachmentProcessor
-      Result = Data.define(:upload_ids, :markdown)
+      METADATA_KEYS = %w[id filename content_type size].freeze
+      Result = Data.define(:upload_ids, :markdown, :records)
+
+      def self.signature(attachments)
+        Array(attachments).map { |attachment| attachment.to_h.slice(*METADATA_KEYS) }
+      end
 
       def initialize(actor: User.find(BRIDGE_USER_ID))
         @actor = actor
@@ -12,14 +17,19 @@ module DiscordChatBridge
       def call(attachments)
         upload_ids = []
         markdown = []
+        records = []
 
         Array(attachments).each do |attachment|
           result = process(attachment)
           upload_ids << result[:upload].id if result[:upload]
           markdown << result[:markdown]
+          records << attachment
+            .to_h
+            .slice(*METADATA_KEYS)
+            .merge("upload_id" => result[:upload]&.id, "markdown" => result[:markdown])
         end
 
-        Result.new(upload_ids:, markdown: markdown.compact.join("\n"))
+        Result.new(upload_ids:, markdown: markdown.compact.join("\n"), records:)
       end
 
       private

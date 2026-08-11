@@ -8,6 +8,7 @@ module DiscordChatBridge
     has_many :message_mappings, class_name: "DiscordChatBridge::MessageMapping", dependent: :nullify
 
     validates :discord_user_id, :discord_username, :display_name, :last_synced_at, presence: true
+    validates :discord_user_id, format: { with: ChannelMapping::SNOWFLAKE_FORMAT }
     validates :discord_user_id, uniqueness: true
 
     def browser_user_id

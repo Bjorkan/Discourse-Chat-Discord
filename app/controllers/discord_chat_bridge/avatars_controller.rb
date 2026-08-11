@@ -16,7 +16,7 @@ module DiscordChatBridge
 
     def avatar_target(identity)
       return Discourse.store.url_for(identity.avatar_upload) if identity.avatar_upload
-      return identity.avatar_url if identity.avatar_url.present?
+      return identity.avatar_url if Discord::AvatarUrl.valid?(identity.avatar_url)
       if SiteSetting.discord_chat_bridge_avatar_fallback_url.present?
         return SiteSetting.discord_chat_bridge_avatar_fallback_url
       end
