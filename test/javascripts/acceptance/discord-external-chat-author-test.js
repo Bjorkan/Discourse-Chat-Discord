@@ -2,11 +2,12 @@ import { settled } from "@ember/test-helpers";
 import { module, test } from "qunit";
 import initializer, {
   decorateExternalAuthor,
+  initializeExternalAuthorPresentation,
   registerExternalAuthorDecorator,
 } from "discourse/plugins/discourse-discord-chat-bridge/discourse/initializers/discord-external-chat-authors";
 
 module("Discord Chat Bridge | external author presentation", function () {
-  test("registers only after the Chat plugin API is available", function (assert) {
+  test("registers without cross-registry initializer dependencies", function (assert) {
     let registeredDecorator;
     const api = {
       decorateChatMessage(decorator) {
@@ -14,10 +15,23 @@ module("Discord Chat Bridge | external author presentation", function () {
       },
     };
 
-    assert.strictEqual(initializer.after, "chat-plugin-api");
+    assert.strictEqual(initializer.after, undefined);
+    assert.strictEqual(initializer.before, undefined);
     assert.true(registerExternalAuthorDecorator(api));
     assert.strictEqual(registeredDecorator, decorateExternalAuthor);
     assert.false(registerExternalAuthorDecorator({}));
+    assert.false(
+      registerExternalAuthorDecorator({
+        decorateChatMessage() {
+          throw new Error("incompatible Chat API");
+        },
+      })
+    );
+    assert.false(
+      initializeExternalAuthorPresentation(() => {
+        throw new Error("plugin API unavailable");
+      })
+    );
   });
 
   test("shows the source badge and removes local user-card interactions", async function (assert) {

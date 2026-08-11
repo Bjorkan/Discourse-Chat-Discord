@@ -1,23 +1,6 @@
 import { schedule } from "@ember/runloop";
 import { withPluginApi } from "discourse/lib/plugin-api";
 import { i18n } from "discourse-i18n";
-import ChatMessage from "discourse/plugins/chat/discourse/models/chat-message" with {
-  discourseImport: "optional",
-};
-
-function retainExternalAuthorMetadata() {
-  if (!ChatMessage || ChatMessage.discordChatBridgePatched) {
-    return;
-  }
-
-  const originalCreate = ChatMessage.create.bind(ChatMessage);
-  ChatMessage.create = (channel, args = {}) => {
-    const message = originalCreate(channel, args);
-    message.externalAuthor = args.external_author;
-    return message;
-  };
-  ChatMessage.discordChatBridgePatched = true;
-}
 
 export function decorateExternalAuthor(element) {
   schedule("afterRender", () => {
@@ -57,16 +40,26 @@ export function registerExternalAuthorDecorator(api) {
     return false;
   }
 
-  api.decorateChatMessage(decorateExternalAuthor);
-  return true;
+  try {
+    api.decorateChatMessage(decorateExternalAuthor);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function initializeExternalAuthorPresentation(withApi = withPluginApi) {
+  try {
+    return withApi(registerExternalAuthorDecorator) ?? true;
+  } catch {
+    return false;
+  }
 }
 
 export default {
   name: "discord-external-chat-authors",
-  after: "chat-plugin-api",
 
   initialize() {
-    retainExternalAuthorMetadata();
-    withPluginApi(registerExternalAuthorDecorator);
+    initializeExternalAuthorPresentation();
   },
 };
