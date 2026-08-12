@@ -5,6 +5,7 @@ module DiscordChatBridge
     PATCHES = {
       "Chat::Message" => "DiscordChatBridge::ChatMessageExtension",
       "Chat::MessageSerializer" => "DiscordChatBridge::MessageSerializerExtension",
+      "Chat::MessagesSerializer" => "DiscordChatBridge::MessagesSerializerExtension",
       "Chat::InReplyToSerializer" => "DiscordChatBridge::InReplyToSerializerExtension",
       "Chat::ThreadOriginalMessageSerializer" =>
         "DiscordChatBridge::ThreadOriginalMessageSerializerExtension",
