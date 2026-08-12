@@ -182,6 +182,7 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     execute("MESSAGE_CREATE", discord_payload(:id => "103", "type" => 7), 4)
 
     expect(DiscordChatBridge::MessageMapping.all).to be_empty
+    expect(DiscordChatBridge::EventState.where(processed_at: nil)).to be_empty
   end
 
   it "uses nickname, then global name, and keeps identity stable through rename" do

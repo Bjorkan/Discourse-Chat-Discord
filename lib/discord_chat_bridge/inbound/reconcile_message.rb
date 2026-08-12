@@ -26,7 +26,10 @@ module DiscordChatBridge
 
       def reconcile(state)
         mapping = ChannelMapping.active.find_by(discord_channel_id: state.discord_channel_id)
-        return unless mapping&.inbound?
+        unless mapping&.inbound?
+          state.update!(processed_at: Time.zone.now, last_error: nil)
+          return
+        end
 
         message_mapping =
           MessageMapping.find_by(
@@ -48,7 +51,10 @@ module DiscordChatBridge
           delete_message(message_mapping, state)
         else
           payload = complete_payload(state)
-          return unless message_mapping || Filter.accept?(payload, mapping)
+          unless message_mapping || Filter.accept?(payload, mapping)
+            state.update!(processed_at: Time.zone.now, last_error: nil)
+            return
+          end
 
           if message_mapping&.chat_message_id
             update_message(message_mapping, payload, state)
