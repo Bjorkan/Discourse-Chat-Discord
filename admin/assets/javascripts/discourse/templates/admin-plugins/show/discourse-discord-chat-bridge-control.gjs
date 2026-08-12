@@ -4,7 +4,7 @@ import DiscordChatBridgeAdmin from "discourse/plugins/discourse-discord-chat-bri
 
 export default <template>
   <DBreadcrumbsItem
-    @path="/admin/plugins/Discourse-Chat-Discord/bridge"
+    @path="/admin/plugins/discourse-discord-chat-bridge/bridge"
     @label={{i18n "discord_chat_bridge.admin.title"}}
   />
   <DiscordChatBridgeAdmin @state={{@model}} />
