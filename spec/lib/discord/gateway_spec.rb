@@ -101,6 +101,17 @@ RSpec.describe DiscordChatBridge::Discord::Gateway do
     expect(gateway.send(:gateway_url)).to eq("wss://resume.discord.gg?v=10&encoding=json")
   end
 
+  it "stops before identifying when Discord requires sharding" do
+    client.stubs(:gateway_bot).returns(
+      { "url" => "wss://gateway.discord.gg", "shards" => 2 },
+    )
+
+    expect { gateway.send(:gateway_url) }.to raise_error(
+      DiscordChatBridge::PermanentError,
+      "Discord requires 2 Gateway shards, which this bridge does not support",
+    )
+  end
+
   it "rejects unsafe Gateway and resume URLs" do
     gateway.instance_variable_set(
       :@session,

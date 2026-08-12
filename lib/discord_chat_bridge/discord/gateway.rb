@@ -302,7 +302,12 @@ module DiscordChatBridge
           if resumable?
             @session["resume_gateway_url"]
           else
-            @client.gateway_bot.fetch("url")
+            gateway_configuration = @client.gateway_bot
+            if gateway_configuration["shards"].to_i > 1
+              raise PermanentError,
+                    "Discord requires #{gateway_configuration["shards"]} Gateway shards, which this bridge does not support"
+            end
+            gateway_configuration.fetch("url")
           end
         uri = URI(base)
         valid_host = uri.host == "gateway.discord.gg" || uri.host&.end_with?(".discord.gg")
