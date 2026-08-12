@@ -61,4 +61,27 @@ RSpec.describe DiscordChatBridge::Outbound::UpdateMessage do
 
     DiscordChatBridge::Outbound::UpdateMessage.new(message.id, client:).call
   end
+
+  it "retries a failed create when the Discourse message is edited" do
+    message_mapping.update!(
+      discord_message_id: "pending:delivery-nonce",
+      delivery_status: "failed",
+      last_error: "Discord returned HTTP 404",
+    )
+    client
+      .expects(:execute_webhook)
+      .with do |args|
+        args[:webhook_id] == channel_mapping.discord_webhook_id &&
+          args.dig(:payload, :content) == message.message
+      end
+      .returns({ "id" => "601", "attachments" => [] })
+
+    DiscordChatBridge::Outbound::UpdateMessage.new(message.id, client:).call
+
+    expect(message_mapping.reload).to have_attributes(
+      discord_message_id: "601",
+      delivery_status: "delivered",
+      last_error: nil,
+    )
+  end
 end

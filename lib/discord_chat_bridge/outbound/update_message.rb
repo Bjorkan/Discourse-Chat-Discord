@@ -10,10 +10,12 @@ module DiscordChatBridge
       def call
         return unless eligible?
         message_mapping = existing_message_mapping
-        unless message_mapping&.origin == "discourse" &&
-                 message_mapping.delivery_status == "delivered"
+        return unless message_mapping&.origin == "discourse"
+        if message_mapping.delivery_status.in?(%w[pending failed])
+          CreateMessage.new(message.id, client: @client).call
           return
         end
+        return unless message_mapping.delivery_status == "delivered"
         return if message_mapping.deleted_on_discord_at.present?
 
         value = content
