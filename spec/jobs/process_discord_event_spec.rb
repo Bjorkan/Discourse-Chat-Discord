@@ -16,12 +16,13 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     ensure_bridge_actor
   end
 
-  def execute(type, payload, sequence, session_id = nil)
+  def execute(type, payload, sequence, session_id = nil, session_generation = nil)
     described_class.new.execute(
       event_type: type,
       payload: payload,
       gateway_sequence: sequence,
       gateway_session_id: session_id,
+      gateway_session_generation: session_generation,
     )
   end
 
@@ -204,8 +205,18 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
   end
 
   it "accepts a lower sequence after a fresh Gateway session" do
-    execute("MESSAGE_CREATE", discord_payload, 100, "session-a")
-    execute("MESSAGE_UPDATE", discord_payload(content: "New session edit"), 1, "session-b")
+    execute("MESSAGE_CREATE", discord_payload, 100, "session-a", 1)
+    execute("MESSAGE_UPDATE", discord_payload(content: "New session edit"), 1, "session-b", 2)
+
+    expect(DiscordChatBridge::MessageMapping.last.chat_message.reload.message).to eq(
+      "New session edit",
+    )
+  end
+
+  it "rejects a delayed event from an older Gateway session" do
+    execute("MESSAGE_CREATE", discord_payload, 100, "session-a", 1)
+    execute("MESSAGE_UPDATE", discord_payload(content: "New session edit"), 1, "session-b", 2)
+    execute("MESSAGE_UPDATE", discord_payload(content: "Delayed old edit"), 101, "session-a", 1)
 
     expect(DiscordChatBridge::MessageMapping.last.chat_message.reload.message).to eq(
       "New session edit",

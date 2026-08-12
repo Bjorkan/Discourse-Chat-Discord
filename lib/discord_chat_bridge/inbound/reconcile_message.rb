@@ -68,7 +68,7 @@ module DiscordChatBridge
       end
 
       def complete_payload(state)
-        payload = state.payload.to_h
+        payload = state.payload.to_h.except("_gateway_session_generation")
         complete =
           payload.dig("author", "id").present? && payload.key?("content") &&
             payload.key?("attachments")

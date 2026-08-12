@@ -6,6 +6,7 @@ module DiscordChatBridge
     SESSION_KEY = "discord_chat_bridge:gateway:session"
     RECONNECT_KEY = "discord_chat_bridge:gateway:reconnect"
     STANDBY_KEY = "discord_chat_bridge:gateway:standby"
+    SESSION_GENERATION_KEY = "discord_chat_bridge:gateway:session_generation"
     UPDATE_SCRIPT = <<~LUA
       local current = {}
       local existing = redis.call('get', KEYS[1])
@@ -61,6 +62,10 @@ module DiscordChatBridge
 
     def self.refresh_session
       Discourse.redis.expire(SESSION_KEY, 1.hour.to_i)
+    end
+
+    def self.next_session_generation
+      Discourse.redis.incr(SESSION_GENERATION_KEY)
     end
 
     def self.clear_session

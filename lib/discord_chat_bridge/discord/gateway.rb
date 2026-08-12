@@ -163,6 +163,7 @@ module DiscordChatBridge
 
         case type
         when "READY"
+          @session["generation"] = Health.next_session_generation
           @session["session_id"] = data["session_id"]
           @session["resume_gateway_url"] = data["resume_gateway_url"]
           @session["bot_user_id"] = data.dig("user", "id")
@@ -206,6 +207,7 @@ module DiscordChatBridge
           payload: EventNormalizer.call(type, data),
           gateway_sequence: sequence,
           gateway_session_id: @session["session_id"],
+          gateway_session_generation: @session["generation"],
         )
       end
 
@@ -280,6 +282,7 @@ module DiscordChatBridge
       end
 
       def resume
+        @session["generation"] ||= Health.next_session_generation
         send_payload(
           op: 6,
           d: {
@@ -320,7 +323,13 @@ module DiscordChatBridge
 
       def persist_session
         Health.save_session(
-          @session.slice("session_id", "sequence", "resume_gateway_url", "bot_user_id"),
+          @session.slice(
+            "session_id",
+            "sequence",
+            "resume_gateway_url",
+            "bot_user_id",
+            "generation",
+          ),
         )
       end
 

@@ -7,6 +7,7 @@ module Jobs
 
       def execute(args)
         @gateway_session_id = args[:gateway_session_id].to_s.presence
+        @gateway_session_generation = args[:gateway_session_generation]&.to_i
         event_type = args[:event_type]
         payload = args[:payload] || {}
 
@@ -47,10 +48,19 @@ module Jobs
 
         state.with_lock do
           incoming_sequence = sequence&.to_i
-          same_session = state.gateway_session_id == @gateway_session_id
-          if state.persisted? && same_session && state.gateway_sequence && incoming_sequence &&
-               incoming_sequence < state.gateway_sequence
-            return nil
+          if state.persisted?
+            stored_generation = state.payload["_gateway_session_generation"]&.to_i
+            same_session = state.gateway_session_id == @gateway_session_id
+            if stored_generation && @gateway_session_generation
+              return nil if @gateway_session_generation < stored_generation
+              same_session = @gateway_session_generation == stored_generation
+            elsif stored_generation && !same_session
+              return nil
+            end
+            if same_session && state.gateway_sequence && incoming_sequence &&
+                 incoming_sequence < state.gateway_sequence
+              return nil
+            end
           end
 
           if event_type == "MESSAGE_CREATE"
@@ -65,6 +75,12 @@ module Jobs
               else
                 payload.merge("_fetch_required" => true)
               end
+          end
+          if @gateway_session_generation
+            state.payload =
+              state.payload.merge(
+                "_gateway_session_generation" => @gateway_session_generation,
+              )
           end
           state.latest_event_type = event_type
           state.gateway_sequence = incoming_sequence if incoming_sequence
