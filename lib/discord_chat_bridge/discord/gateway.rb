@@ -307,6 +307,14 @@ module DiscordChatBridge
               raise PermanentError,
                     "Discord requires #{gateway_configuration["shards"]} Gateway shards, which this bridge does not support"
             end
+            session_limit = gateway_configuration["session_start_limit"] || {}
+            if session_limit["remaining"].to_i <= 0 && session_limit.key?("remaining")
+              retry_after = [session_limit["reset_after"].to_f / 1000.0, 1].max
+              raise RetryableError.new(
+                      "Discord Gateway session start limit is exhausted",
+                      retry_after:,
+                    )
+            end
             gateway_configuration.fetch("url")
           end
         uri = URI(base)

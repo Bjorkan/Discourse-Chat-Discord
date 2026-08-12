@@ -89,6 +89,20 @@ module DiscordChatBridge
             "result=fatal error_class=#{error.class}",
         )
         wait_until_fatal_cleared(reconnect_request)
+      rescue RetryableError => error
+        restart_delay = error.retry_after || 5
+        Health.update_gateway(
+          connected: false,
+          connecting: false,
+          waiting: true,
+          last_error: error.message,
+          retry_at: (Time.zone.now + restart_delay).iso8601,
+          fatal: false,
+        )
+        Rails.logger.warn(
+          "#{Log.prefix(operation: "run", direction: "gateway")} " \
+            "result=waiting error_class=#{error.class}",
+        )
       rescue => error
         Health.update_gateway(connected: false, last_error: error.class.name, fatal: false)
         Rails.logger.warn(

@@ -112,6 +112,24 @@ RSpec.describe DiscordChatBridge::Discord::Gateway do
     )
   end
 
+  it "waits for Discord's session start budget to reset" do
+    client.stubs(:gateway_bot).returns(
+      {
+        "url" => "wss://gateway.discord.gg",
+        "shards" => 1,
+        "session_start_limit" => {
+          "remaining" => 0,
+          "reset_after" => 120_000,
+        },
+      },
+    )
+
+    expect { gateway.send(:gateway_url) }.to raise_error do |error|
+      expect(error).to be_a(DiscordChatBridge::RetryableError)
+      expect(error.retry_after).to eq(120)
+    end
+  end
+
   it "rejects unsafe Gateway and resume URLs" do
     gateway.instance_variable_set(
       :@session,

@@ -141,6 +141,7 @@ module DiscordChatBridge
             "last_ready_at",
             "last_resumed_at",
             "last_heartbeat_ack_at",
+            "retry_at",
             "last_error",
             "fatal",
             "updated_at",
