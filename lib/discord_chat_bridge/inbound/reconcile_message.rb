@@ -14,9 +14,7 @@ module DiscordChatBridge
 
       def call
         state = EventState.find(@state_id)
-        DistributedMutex.synchronize(lock_key(state), validity: 5.minutes) do
-          reconcile(state.reload)
-        end
+        reconcile(state.reload)
       rescue => error
         EventState.where(id: @state_id).update_all(last_error: error.message.to_s.first(500))
         raise
@@ -241,9 +239,6 @@ module DiscordChatBridge
         nil
       end
 
-      def lock_key(state)
-        "discord_chat_bridge:message:#{state.discord_channel_id}:#{state.discord_message_id}"
-      end
     end
   end
 end
