@@ -123,6 +123,7 @@ export default class DiscordChatBridgeAdmin extends Component {
     this.loading = true;
     try {
       await ajax("/discord-chat-bridge/admin/reconnect", { type: "POST" });
+      this.state = await ajax("/discord-chat-bridge/admin");
     } catch (error) {
       popupAjaxError(error);
     } finally {
