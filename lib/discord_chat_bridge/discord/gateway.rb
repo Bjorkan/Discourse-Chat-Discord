@@ -260,6 +260,7 @@ module DiscordChatBridge
       def heartbeat(track_ack: true)
         @heartbeat_acknowledged = false if track_ack
         send_payload(op: 1, d: @session["sequence"])
+        Health.refresh_session
         Health.update_gateway(last_heartbeat_at: Time.zone.now.iso8601)
       end
 

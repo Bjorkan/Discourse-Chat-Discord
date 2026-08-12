@@ -59,6 +59,10 @@ module DiscordChatBridge
       Discourse.redis.set(SESSION_KEY, JSON.generate(session), ex: 1.hour.to_i)
     end
 
+    def self.refresh_session
+      Discourse.redis.expire(SESSION_KEY, 1.hour.to_i)
+    end
+
     def self.clear_session
       Discourse.redis.del(SESSION_KEY)
     end
