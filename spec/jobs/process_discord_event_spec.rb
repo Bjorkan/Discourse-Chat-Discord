@@ -205,6 +205,14 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     expect(DiscordChatBridge::MessageMapping.first.author_display_name).to eq("Guild Alice")
   end
 
+  it "uses Discord's default avatar for an author without a custom avatar" do
+    execute("MESSAGE_CREATE", discord_payload("author" => { "avatar" => nil }), 1)
+
+    expect(DiscordChatBridge::Identity.last.avatar_url).to eq(
+      "https://cdn.discordapp.com/embed/avatars/0.png",
+    )
+  end
+
   it "creates native replies when the referenced message is mapped" do
     execute("MESSAGE_CREATE", discord_payload(id: "100"), 1)
     execute(

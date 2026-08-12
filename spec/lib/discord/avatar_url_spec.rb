@@ -17,4 +17,9 @@ RSpec.describe DiscordChatBridge::Discord::AvatarUrl do
       false,
     )
   end
+
+  it "accepts Discord's six default avatars" do
+    expect(described_class.valid?("https://cdn.discordapp.com/embed/avatars/5.png")).to eq(true)
+    expect(described_class.valid?("https://cdn.discordapp.com/embed/avatars/6.png")).to eq(false)
+  end
 end

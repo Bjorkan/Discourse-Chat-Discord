@@ -16,6 +16,16 @@ RSpec.describe DiscordChatBridge::Discord::EventNormalizer do
     expect(result.dig("author", "id")).to eq("300")
   end
 
+  it "keeps the discriminator used for Discord default avatars" do
+    result =
+      described_class.call(
+        "MESSAGE_CREATE",
+        discord_payload("author" => { "avatar" => nil, "discriminator" => "1234" }),
+      )
+
+    expect(result.dig("author", "discriminator")).to eq("1234")
+  end
+
   it "preserves omitted fields on partial updates" do
     result =
       described_class.call(
