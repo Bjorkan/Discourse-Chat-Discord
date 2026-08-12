@@ -57,7 +57,7 @@ module DiscordChatBridge
 
       lease = Discord::LeaderLease.new
       unless lease.acquire
-        Health.update_gateway(standby_seen_at: Time.zone.now.iso8601)
+        Health.record_standby!
         wait_until_stopping(10)
         return
       end

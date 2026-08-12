@@ -5,6 +5,7 @@ module DiscordChatBridge
     KEY = "discord_chat_bridge:gateway:health"
     SESSION_KEY = "discord_chat_bridge:gateway:session"
     RECONNECT_KEY = "discord_chat_bridge:gateway:reconnect"
+    STANDBY_KEY = "discord_chat_bridge:gateway:standby"
     UPDATE_SCRIPT = <<~LUA
       local current = {}
       local existing = redis.call('get', KEYS[1])
@@ -26,7 +27,13 @@ module DiscordChatBridge
     LUA
 
     def self.gateway
-      JSON.parse(Discourse.redis.get(KEY) || "{}")
+      health = JSON.parse(Discourse.redis.get(KEY) || "{}")
+      if (standby_seen_at = Discourse.redis.get(STANDBY_KEY)).present?
+        health["standby_seen_at"] = standby_seen_at
+        health["standby"] = !health["connected"]
+        health["connected"] = false if health["connected"].nil?
+      end
+      health
     rescue JSON::ParserError
       {}
     end
@@ -62,6 +69,10 @@ module DiscordChatBridge
 
     def self.reconnect_request
       Discourse.redis.get(RECONNECT_KEY)
+    end
+
+    def self.record_standby!
+      Discourse.redis.set(STANDBY_KEY, Time.zone.now.iso8601, ex: 30.seconds.to_i)
     end
   end
 end
