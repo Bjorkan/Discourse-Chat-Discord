@@ -69,6 +69,8 @@ module DiscordChatBridge
            ArgumentError,
            PermanentError => error
       render_json_error safe_error(error), status: 422
+    rescue RetryableError => error
+      render_json_error safe_error(error), status: 503
     end
 
     def update_mapping
@@ -90,6 +92,8 @@ module DiscordChatBridge
            ArgumentError,
            PermanentError => error
       render_json_error safe_error(error), status: 422
+    rescue RetryableError => error
+      render_json_error safe_error(error), status: 503
     end
 
     def destroy_mapping

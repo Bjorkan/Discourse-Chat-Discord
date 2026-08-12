@@ -89,6 +89,27 @@ RSpec.describe DiscordChatBridge::AdminController do
     expect(mapping.reload.discord_channel_id).not_to eq("987654321")
   end
 
+  it "returns service unavailable when Discord cannot validate a new webhook" do
+    chat_channel = Fabricate(:chat_channel)
+    DiscordChatBridge::Discord::Client
+      .any_instance
+      .expects(:webhook)
+      .raises(DiscordChatBridge::RetryableError, "Discord connection failed")
+
+    post "/discord-chat-bridge/admin/mappings.json",
+         params: {
+           discord_guild_id: "400",
+           discord_channel_id: "200",
+           chat_channel_id: chat_channel.id,
+           direction: "discourse_to_discord",
+           enabled: true,
+           webhook_url: "https://discord.com/api/webhooks/500/webhook-token",
+         }
+
+    expect(response.status).to eq(503)
+    expect(DiscordChatBridge::ChannelMapping.where(chat_channel:)).to be_empty
+  end
+
   it "rejects a mapping test when the Discord channel belongs to another guild" do
     mapping = Fabricate(:discord_chat_bridge_channel_mapping)
     DiscordChatBridge::Discord::Client
