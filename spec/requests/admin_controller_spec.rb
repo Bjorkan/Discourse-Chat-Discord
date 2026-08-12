@@ -104,7 +104,7 @@ RSpec.describe DiscordChatBridge::AdminController do
     )
   end
 
-  it "tests both the bot channel and webhook for an outbound mapping" do
+  it "tests an outbound-only mapping without requiring bot channel access" do
     mapping =
       Fabricate(
         :discord_chat_bridge_channel_mapping,
@@ -113,13 +113,7 @@ RSpec.describe DiscordChatBridge::AdminController do
         webhook_token: "webhook-token",
       )
     client = DiscordChatBridge::Discord::Client.any_instance
-    client.expects(:channel).returns(
-      {
-        "id" => mapping.discord_channel_id,
-        "guild_id" => mapping.discord_guild_id,
-        "name" => "general",
-      },
-    )
+    client.expects(:channel).never
     client.expects(:webhook).returns(
       { "channel_id" => mapping.discord_channel_id, "guild_id" => mapping.discord_guild_id },
     )
@@ -127,5 +121,6 @@ RSpec.describe DiscordChatBridge::AdminController do
     post "/discord-chat-bridge/admin/test.json", params: { mapping_id: mapping.id }
 
     expect(response.status).to eq(200)
+    expect(response.parsed_body.dig("channel", "id")).to eq(mapping.discord_channel_id)
   end
 end

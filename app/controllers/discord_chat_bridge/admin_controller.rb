@@ -22,15 +22,26 @@ module DiscordChatBridge
         unless Chat::Channel.exists?(mapping.chat_channel_id)
           raise ArgumentError, "Discourse Chat channel no longer exists"
         end
-        channel = Discord::Client.new.channel(mapping.discord_channel_id)
-        validate_remote_guild!(channel, mapping)
+        client = Discord::Client.new
+        channel = nil
+        if mapping.inbound?
+          channel = client.channel(mapping.discord_channel_id)
+          validate_remote_guild!(channel, mapping)
+        end
+        webhook = nil
         if mapping.outbound?
           unless mapping.webhook_configured?
             raise ArgumentError, "Discord webhook is not configured"
           end
-          validate_remote_webhook!(mapping)
+          webhook = validate_remote_webhook!(mapping, client:)
         end
-        render json: { ok: true, channel: { id: channel["id"], name: channel["name"] } }
+        render json: {
+                 ok: true,
+                 channel: {
+                   id: channel&.dig("id") || webhook&.dig("channel_id"),
+                   name: channel&.dig("name"),
+                 },
+               }
         return
       end
 
@@ -157,9 +168,9 @@ module DiscordChatBridge
       mapping.discord_channel_id_changed? || mapping.direction_changed? || mapping.enabled_changed?
     end
 
-    def validate_remote_webhook!(mapping)
+    def validate_remote_webhook!(mapping, client: Discord::Client.new)
       webhook =
-        Discord::Client.new.webhook(
+        client.webhook(
           webhook_id: mapping.discord_webhook_id,
           token: mapping.webhook_token,
         )
@@ -167,6 +178,7 @@ module DiscordChatBridge
         raise ArgumentError, "Discord webhook belongs to a different channel"
       end
       validate_remote_guild!(webhook, mapping)
+      webhook
     end
 
     def validate_remote_guild!(remote_resource, mapping)
