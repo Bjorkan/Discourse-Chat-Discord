@@ -211,7 +211,9 @@ module DiscordChatBridge
 
       def cached_attachment_result(message_mapping, attachments)
         records = Array(message_mapping.discord_attachments)
-        unless AttachmentProcessor.signature(records) == AttachmentProcessor.signature(attachments)
+        include_url = records.any? { |record| record["upload_id"].blank? }
+        unless AttachmentProcessor.signature(records, include_url:) ==
+                 AttachmentProcessor.signature(attachments, include_url:)
           return
         end
 
