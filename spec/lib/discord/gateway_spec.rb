@@ -42,6 +42,23 @@ RSpec.describe DiscordChatBridge::Discord::Gateway do
     gateway.send(:resume)
   end
 
+  it "answers a requested heartbeat without invalidating the scheduled heartbeat ACK" do
+    websocket = mock
+    gateway.instance_variable_set(:@websocket, websocket)
+    gateway.instance_variable_set(:@heartbeat_acknowledged, true)
+    gateway.instance_variable_set(:@session, { "sequence" => 42 })
+    websocket
+      .expects(:send)
+      .with do |json|
+        payload = JSON.parse(json)
+        payload == { "op" => 1, "d" => 42 }
+      end
+
+    gateway.send(:handle_payload, { "op" => 1 })
+
+    expect(gateway.instance_variable_get(:@heartbeat_acknowledged)).to eq(true)
+  end
+
   it "uses the resume URL for a resumable session" do
     gateway.instance_variable_set(
       :@session,

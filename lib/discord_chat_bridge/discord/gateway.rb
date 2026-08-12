@@ -133,7 +133,7 @@ module DiscordChatBridge
         when 0
           handle_dispatch(payload)
         when 1
-          heartbeat
+          heartbeat(track_ack: false)
         when 7
           close_for_resume
         when 9
@@ -256,8 +256,8 @@ module DiscordChatBridge
           end
       end
 
-      def heartbeat
-        @heartbeat_acknowledged = false
+      def heartbeat(track_ack: true)
+        @heartbeat_acknowledged = false if track_ack
         send_payload(op: 1, d: @session["sequence"])
         Health.update_gateway(last_heartbeat_at: Time.zone.now.iso8601)
       end
