@@ -39,6 +39,23 @@ export default class DiscordChatBridgeAdmin extends Component {
     return this.state.gateway?.connected;
   }
 
+  get gatewayStatusLabel() {
+    const gateway = this.state.gateway ?? {};
+    let status = "disconnected";
+    if (gateway.fatal) {
+      status = "fatal";
+    } else if (gateway.connected) {
+      status = "connected";
+    } else if (gateway.connecting) {
+      status = "connecting";
+    } else if (gateway.waiting) {
+      status = "waiting";
+    } else if (gateway.standby) {
+      status = "standby";
+    }
+    return i18n(`discord_chat_bridge.admin.${status}`);
+  }
+
   get hasMappings() {
     return this.state.mappings?.length > 0;
   }
@@ -263,11 +280,7 @@ export default class DiscordChatBridgeAdmin extends Component {
           <strong
             class={{if this.gatewayConnected "is-healthy" "is-unhealthy"}}
           >
-            {{if
-              this.gatewayConnected
-              (i18n "discord_chat_bridge.admin.connected")
-              (i18n "discord_chat_bridge.admin.disconnected")
-            }}
+            {{this.gatewayStatusLabel}}
           </strong>
         </div>
         <div>
@@ -277,6 +290,25 @@ export default class DiscordChatBridgeAdmin extends Component {
           <strong>{{or
               this.state.gateway.last_event_at
               (i18n "discord_chat_bridge.admin.never")
+            }}</strong>
+        </div>
+        <div>
+          <span class="discord-chat-bridge-status__label">{{i18n
+              "discord_chat_bridge.admin.last_heartbeat_ack"
+            }}</span>
+          <strong>{{or
+              this.state.gateway.last_heartbeat_ack_at
+              (i18n "discord_chat_bridge.admin.never")
+            }}</strong>
+        </div>
+        <div>
+          <span class="discord-chat-bridge-status__label">{{i18n
+              "discord_chat_bridge.admin.resume_state"
+            }}</span>
+          <strong>{{if
+              this.state.gateway.session_resumable
+              (i18n "discord_chat_bridge.admin.resumable")
+              (i18n "discord_chat_bridge.admin.not_resumable")
             }}</strong>
         </div>
         <div>
@@ -296,6 +328,21 @@ export default class DiscordChatBridgeAdmin extends Component {
               errors=this.state.summary.mapping_errors
             }}
           </strong>
+        </div>
+        <div>
+          <span class="discord-chat-bridge-status__label">{{i18n
+              "discord_chat_bridge.admin.outbound_delivery"
+            }}</span>
+          <strong
+            class={{if
+              this.state.summary.ambiguous_deliveries
+              "is-unhealthy"
+              "is-healthy"
+            }}
+          >{{i18n
+              "discord_chat_bridge.admin.ambiguous_summary"
+              count=this.state.summary.ambiguous_deliveries
+            }}</strong>
         </div>
       </div>
 
