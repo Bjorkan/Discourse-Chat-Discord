@@ -75,8 +75,8 @@ module DiscordChatBridge
         return payload if !payload.delete("_fetch_required") && complete
 
         fetched = @client.message(state.discord_channel_id, state.discord_message_id)
-        Discord::EventNormalizer.call("MESSAGE_UPDATE", fetched).merge(
-          payload.slice("id", "channel_id", "guild_id"),
+        Discord::EventNormalizer.call("MESSAGE_UPDATE", fetched).deep_merge(
+          payload.except("_fetch_required"),
         )
       end
 

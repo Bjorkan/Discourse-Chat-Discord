@@ -124,6 +124,34 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     expect(DiscordChatBridge::MessageMapping.last.chat_message.reload.message).to eq("Fetched edit")
   end
 
+  it "preserves guild identity fields from a partial update" do
+    execute("MESSAGE_CREATE", discord_payload("member" => { "nick" => "Guild Alice" }), 1)
+    DiscordChatBridge::Discord::Client
+      .any_instance
+      .expects(:message)
+      .returns(discord_payload(content: "Fetched edit").except("member"))
+
+    execute(
+      "MESSAGE_UPDATE",
+      {
+        "id" => "100",
+        "channel_id" => "200",
+        "guild_id" => "400",
+        "member" => {
+          "nick" => "Renamed in guild",
+          "avatar" => "guild-avatar",
+        },
+      },
+      2,
+    )
+
+    expect(DiscordChatBridge::MessageMapping.last.reload).to have_attributes(
+      author_display_name: "Renamed in guild",
+      author_avatar_url:
+        "https://cdn.discordapp.com/guilds/400/users/300/avatars/guild-avatar.png?size=128",
+    )
+  end
+
   it "trashes on delete and handles duplicate delete" do
     execute("MESSAGE_CREATE", discord_payload, 1)
     2.times { execute("MESSAGE_DELETE", { "id" => "100", "channel_id" => "200" }, 2) }
