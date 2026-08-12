@@ -62,4 +62,16 @@ RSpec.describe DiscordChatBridge::Outbound::Base do
       "Discord accepts at most 10 files for this message",
     )
   end
+
+  it "does not discard the tenth upload to attach a long message" do
+    message = stub(id: 123, uploads: Array.new(10) { stub })
+    outbound = described_class.new(123)
+    outbound.stubs(:message).returns(message)
+    outbound.stubs(:content).returns("x" * 2_001)
+
+    expect { outbound.send(:prepare_content_and_files) }.to raise_error(
+      DiscordChatBridge::PermanentError,
+      "Discord accepts at most 9 files for this message",
+    )
+  end
 end

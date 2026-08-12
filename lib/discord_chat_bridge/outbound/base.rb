@@ -83,8 +83,10 @@ module DiscordChatBridge
 
       def prepare_content_and_files
         value = content
-        files = upload_files
-        if Formatting.discord_length(value) <= Formatting::DISCORD_CONTENT_LIMIT
+        content_requires_file =
+          Formatting.discord_length(value) > Formatting::DISCORD_CONTENT_LIMIT
+        files = upload_files(max_files: MAX_DISCORD_FILES - (content_requires_file ? 1 : 0))
+        unless content_requires_file
           if value.blank? && files.empty?
             value = "(Discourse message contained no supported content)"
           end
@@ -95,7 +97,6 @@ module DiscordChatBridge
         tempfile.binmode
         tempfile.write(value)
         tempfile.rewind
-        cleanup_files([files.pop]) if files.length == 10
         files << {
           io: tempfile,
           filename: "message.txt",
