@@ -7,7 +7,7 @@ plugins:
   discord_chat_bridge_include_other_webhooks:
     default: false
   discord_chat_bridge_max_attachment_mb:
-    default: 20
+    default: 10
     min: 1
     max: 100
   discord_chat_bridge_tombstone_retention_days:
