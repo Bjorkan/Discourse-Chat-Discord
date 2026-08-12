@@ -59,5 +59,9 @@ module DiscordChatBridge
     def self.request_reconnect!
       Discourse.redis.set(RECONNECT_KEY, SecureRandom.uuid, ex: 5.minutes.to_i)
     end
+
+    def self.reconnect_request
+      Discourse.redis.get(RECONNECT_KEY)
+    end
   end
 end

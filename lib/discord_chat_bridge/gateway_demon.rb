@@ -63,6 +63,7 @@ module DiscordChatBridge
       end
 
       restart_delay = nil
+      reconnect_request = Health.reconnect_request
       begin
         Health.update_gateway(connecting: true, standby: false, waiting: false, fatal: false)
         Discord::Gateway.new(
@@ -70,12 +71,17 @@ module DiscordChatBridge
           lease_lost: -> { lease.lost },
         ).run
       rescue PermanentError => error
-        Health.update_gateway(connected: false, last_error: error.message, fatal: true)
+        Health.update_gateway(
+          connected: false,
+          connecting: false,
+          last_error: error.message,
+          fatal: true,
+        )
         Rails.logger.error(
           "#{Log.prefix(operation: "run", direction: "gateway")} " \
             "result=fatal error_class=#{error.class}",
         )
-        restart_delay = 60
+        wait_until_fatal_cleared(reconnect_request)
       rescue => error
         Health.update_gateway(connected: false, last_error: error.class.name, fatal: false)
         Rails.logger.warn(
@@ -87,6 +93,16 @@ module DiscordChatBridge
         lease.release
       end
       wait_until_stopping(restart_delay) if restart_delay
+    end
+
+    def wait_until_fatal_cleared(previous_reconnect_request)
+      until @stopping || !runnable?
+        current_reconnect_request = Health.reconnect_request
+        break if current_reconnect_request.present? &&
+          current_reconnect_request != previous_reconnect_request
+
+        wait_until_stopping(1)
+      end
     end
 
     def safe_health_update(**values)

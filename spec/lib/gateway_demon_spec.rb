@@ -31,4 +31,26 @@ RSpec.describe DiscordChatBridge::GatewayDemon do
 
     2.times { expect(demon.send(:runnable?)).to eq(true) }
   end
+
+  it "does not retry a permanent Gateway failure until reconnect is requested" do
+    Fabricate(:discord_chat_bridge_channel_mapping, direction: "discord_to_discourse")
+    lease = mock
+    lease.expects(:acquire).returns(true)
+    lease.expects(:release)
+    DiscordChatBridge::Discord::LeaderLease.expects(:new).returns(lease)
+
+    gateway = mock
+    gateway.expects(:run).raises(DiscordChatBridge::PermanentError, "invalid token")
+    DiscordChatBridge::Discord::Gateway.expects(:new).returns(gateway)
+    DiscordChatBridge::Health.expects(:reconnect_request).twice.returns("before", "after")
+
+    demon.send(:run_cycle)
+
+    expect(DiscordChatBridge::Health.gateway).to include(
+      "connected" => false,
+      "connecting" => false,
+      "fatal" => true,
+      "last_error" => "invalid token",
+    )
+  end
 end
