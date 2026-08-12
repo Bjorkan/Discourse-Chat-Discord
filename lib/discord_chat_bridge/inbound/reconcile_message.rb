@@ -41,8 +41,15 @@ module DiscordChatBridge
           return
         end
 
-        if message_mapping&.origin == "discourse" ||
-             message_mapping&.deleted_on_discourse_at.present?
+        if message_mapping&.origin == "discourse"
+          if state.discord_deleted_at && message_mapping.deleted_on_discord_at.blank?
+            message_mapping.update!(deleted_on_discord_at: state.discord_deleted_at)
+          end
+          state.update!(processed_at: Time.zone.now, last_error: nil)
+          return
+        end
+
+        if message_mapping&.deleted_on_discourse_at.present?
           state.update!(processed_at: Time.zone.now, last_error: nil)
           return
         end

@@ -266,6 +266,7 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
 
     execute("MESSAGE_DELETE", { "id" => "100", "channel_id" => "200" }, 1)
     expect(local.reload.deleted_at).to be_nil
+    expect(DiscordChatBridge::MessageMapping.last.deleted_on_discord_at).to be_present
   end
 
   it "does not recreate a Chat-retention tombstone" do
