@@ -86,7 +86,6 @@ module Jobs
           state.gateway_sequence = incoming_sequence if incoming_sequence
           state.gateway_session_id = @gateway_session_id
           state.discord_deleted_at = Time.zone.now if event_type == "MESSAGE_DELETE"
-          state.processing_attempts += 1
           state.save!
         end
         state

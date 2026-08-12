@@ -39,6 +39,7 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     2.times { execute("MESSAGE_CREATE", discord_payload, 1) }
     expect(DiscordChatBridge::MessageMapping.count).to eq(1)
     expect(Chat::Message.where(user_id: DiscordChatBridge::BRIDGE_USER_ID).count).to eq(1)
+    expect(DiscordChatBridge::EventState.last.processing_attempts).to eq(2)
   end
 
   it "updates the existing Chat message for MESSAGE_UPDATE" do

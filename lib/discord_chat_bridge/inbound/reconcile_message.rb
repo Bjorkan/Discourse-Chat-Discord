@@ -14,6 +14,7 @@ module DiscordChatBridge
 
       def call
         state = EventState.find(@state_id)
+        state.increment!(:processing_attempts)
         reconcile(state.reload)
       rescue => error
         EventState.where(id: @state_id).update_all(last_error: error.message.to_s.first(500))
