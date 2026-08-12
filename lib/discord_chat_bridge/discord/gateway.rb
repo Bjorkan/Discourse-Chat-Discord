@@ -90,9 +90,7 @@ module DiscordChatBridge
         websocket.on(:error) { |event| guard_callback("error") { handle_error(event) } }
         websocket.on(:close) { |event| guard_callback("close") { handle_close(event) } }
         websocket.on(:open) do
-          guard_callback("open") do
-            Health.update_gateway(connected: true, connecting: false, last_error: nil)
-          end
+          guard_callback("open") { Health.update_gateway(websocket_open: true) }
         end
       end
 
@@ -171,8 +169,11 @@ module DiscordChatBridge
           persist_session
           Health.update_gateway(
             connected: true,
+            connecting: false,
+            websocket_open: true,
             session_resumable: true,
             bot_user_id: @session["bot_user_id"],
+            last_error: nil,
             last_ready_at: Time.zone.now.iso8601,
           )
         when "RESUMED"
@@ -180,7 +181,10 @@ module DiscordChatBridge
           persist_session
           Health.update_gateway(
             connected: true,
+            connecting: false,
+            websocket_open: true,
             session_resumable: true,
+            last_error: nil,
             last_resumed_at: Time.zone.now.iso8601,
           )
         when "MESSAGE_CREATE", "MESSAGE_UPDATE", "MESSAGE_DELETE", "MESSAGE_DELETE_BULK"
@@ -393,7 +397,7 @@ module DiscordChatBridge
       end
 
       def safely_mark_disconnected
-        Health.update_gateway(connected: false, connecting: false)
+        Health.update_gateway(connected: false, connecting: false, websocket_open: false)
       rescue => error
         Rails.logger.warn(
           "#{Log.prefix(operation: "health", direction: "gateway")} " \

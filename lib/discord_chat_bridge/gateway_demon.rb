@@ -65,7 +65,14 @@ module DiscordChatBridge
       restart_delay = nil
       reconnect_request = Health.reconnect_request
       begin
-        Health.update_gateway(connecting: true, standby: false, waiting: false, fatal: false)
+        Health.update_gateway(
+          connected: false,
+          connecting: true,
+          websocket_open: false,
+          standby: false,
+          waiting: false,
+          fatal: false,
+        )
         Discord::Gateway.new(
           stop_requested: -> { @stopping || !runnable? },
           lease_lost: -> { lease.lost },

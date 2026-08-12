@@ -81,6 +81,47 @@ RSpec.describe DiscordChatBridge::Discord::Gateway do
     expect(gateway.instance_variable_get(:@fatal_error)).to be_a(DiscordChatBridge::RetryableError)
   end
 
+  it "reports connected only after Discord sends READY" do
+    callbacks = {}
+    websocket = Object.new
+    websocket.define_singleton_method(:on) { |event, &callback| callbacks[event] = callback }
+    DiscordChatBridge::Health.update_gateway(
+      connected: false,
+      connecting: true,
+      websocket_open: false,
+    )
+    gateway.send(:register_callbacks, websocket)
+
+    callbacks.fetch(:open).call
+
+    expect(DiscordChatBridge::Health.gateway).to include(
+      "connected" => false,
+      "connecting" => true,
+      "websocket_open" => true,
+    )
+
+    gateway.send(
+      :handle_dispatch,
+      {
+        "t" => "READY",
+        "d" => {
+          "session_id" => "session",
+          "resume_gateway_url" => "wss://resume.discord.gg",
+          "user" => {
+            "id" => "bot-user",
+          },
+        },
+      },
+    )
+
+    expect(DiscordChatBridge::Health.gateway).to include(
+      "connected" => true,
+      "connecting" => false,
+      "websocket_open" => true,
+      "bot_user_id" => "bot-user",
+    )
+  end
+
   it "does not let a health write failure mask shutdown" do
     DiscordChatBridge::Health.expects(:update_gateway).raises("Redis unavailable")
 
