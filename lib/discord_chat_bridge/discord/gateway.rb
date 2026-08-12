@@ -18,6 +18,7 @@ module DiscordChatBridge
         @lease_lost = lease_lost
         @session = Health.session
         @backoff = 1.0
+        @send_mutex = Mutex.new
         @last_reconnect_request = Discourse.redis.get(Health::RECONNECT_KEY)
       end
 
@@ -289,7 +290,7 @@ module DiscordChatBridge
       end
 
       def send_payload(payload)
-        @websocket.send(JSON.generate(payload))
+        @send_mutex.synchronize { @websocket.send(JSON.generate(payload)) }
       end
 
       def gateway_url

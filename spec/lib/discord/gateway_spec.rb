@@ -59,6 +59,35 @@ RSpec.describe DiscordChatBridge::Discord::Gateway do
     expect(gateway.instance_variable_get(:@heartbeat_acknowledged)).to eq(true)
   end
 
+  it "serializes payloads sent by concurrent Gateway threads" do
+    state_mutex = Mutex.new
+    active_sends = 0
+    maximum_active_sends = 0
+    sent_payloads = []
+    websocket = Object.new
+    websocket.define_singleton_method(:send) do |payload|
+      state_mutex.synchronize do
+        active_sends += 1
+        maximum_active_sends = [maximum_active_sends, active_sends].max
+      end
+      sleep 0.02
+      state_mutex.synchronize do
+        sent_payloads << JSON.parse(payload)
+        active_sends -= 1
+      end
+    end
+    gateway.instance_variable_set(:@websocket, websocket)
+
+    threads =
+      2.times.map do |index|
+        Thread.new { gateway.send(:send_payload, op: 1, d: index) }
+      end
+    threads.each(&:join)
+
+    expect(maximum_active_sends).to eq(1)
+    expect(sent_payloads).to contain_exactly({ "op" => 1, "d" => 0 }, { "op" => 1, "d" => 1 })
+  end
+
   it "uses the resume URL for a resumable session" do
     gateway.instance_variable_set(
       :@session,
