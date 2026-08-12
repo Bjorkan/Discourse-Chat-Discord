@@ -43,6 +43,19 @@ module DiscordChatBridge
     private
 
     def run_cycle
+      if multisite?
+        Health.update_gateway(
+          connected: false,
+          connecting: false,
+          standby: false,
+          waiting: false,
+          fatal: true,
+          last_error: "Discord Chat Bridge Gateway does not support multisite installations",
+        )
+        wait_until_stopping(30)
+        return
+      end
+
       unless runnable?
         Health.update_gateway(
           connected: false,
@@ -155,6 +168,10 @@ module DiscordChatBridge
         @mapping_check_expires_at = now + MAPPING_CHECK_INTERVAL
       end
       @has_inbound_mapping
+    end
+
+    def multisite?
+      RailsMultisite::ConnectionManagement.all_dbs.many?
     end
   end
 end

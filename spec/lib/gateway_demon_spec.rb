@@ -9,6 +9,7 @@ RSpec.describe DiscordChatBridge::GatewayDemon do
     SiteSetting.discord_chat_bridge_gateway_autostart = true
     DiscordChatBridge::Credentials.stubs(:bot_token?).returns(true)
     DiscordChatBridge::DiscourseIntegration.stubs(:compatible?).returns(true)
+    RailsMultisite::ConnectionManagement.stubs(:all_dbs).returns(["default"])
   end
 
   it "runs only when Chat and an inbound mapping are available" do
@@ -51,6 +52,19 @@ RSpec.describe DiscordChatBridge::GatewayDemon do
       "connecting" => false,
       "fatal" => true,
       "last_error" => "invalid token",
+    )
+  end
+
+  it "stops with an explicit error on multisite installations" do
+    RailsMultisite::ConnectionManagement.stubs(:all_dbs).returns(%w[default second])
+    demon.expects(:wait_until_stopping).with(30)
+
+    demon.send(:run_cycle)
+
+    expect(DiscordChatBridge::Health.gateway).to include(
+      "connected" => false,
+      "fatal" => true,
+      "last_error" => "Discord Chat Bridge Gateway does not support multisite installations",
     )
   end
 end

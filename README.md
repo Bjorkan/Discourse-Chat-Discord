@@ -45,6 +45,7 @@ This repository is the complete application. It has no Node service, external da
 
 ## Deliberate Limitations
 
+- The Gateway daemon currently supports single-site Discourse installations only. On multisite it remains stopped with an explicit fatal health error; outbound webhook jobs are unaffected.
 - Discord controls edits and deletion of Discord-origin content. A local moderator edit to its mirrored Chat row remains local and is not sent to Discord. Normal operation does not require `MANAGE_MESSAGES`.
 - Discord's documented incoming webhook Execute API does not accept `message_reference`. Discourse replies therefore include a compact author/excerpt and a jump link when the target has a Discord mapping. The bridge does not sacrifice webhook identity overrides to emulate native replies through a bot.
 - Updating a webhook message cannot update that message's per-message username or avatar. Content and retained attachment IDs are updated.
