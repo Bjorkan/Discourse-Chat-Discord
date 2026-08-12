@@ -16,7 +16,6 @@ module DiscordChatBridge
         member
         attachments
         message_reference
-        referenced_message
       ].freeze
       AUTHOR_KEYS = %w[id username global_name avatar bot system].freeze
       MEMBER_KEYS = %w[nick avatar].freeze

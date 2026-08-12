@@ -2,11 +2,17 @@
 
 RSpec.describe DiscordChatBridge::Discord::EventNormalizer do
   it "drops unneeded Gateway fields before enqueueing" do
-    payload = discord_payload.merge("embeds" => [{ "large" => "value" }], "nonce" => "secret-ish")
+    payload =
+      discord_payload.merge(
+        "embeds" => [{ "large" => "value" }],
+        "nonce" => "secret-ish",
+        "referenced_message" => discord_payload(id: "99", content: "private nested content"),
+      )
     result = described_class.call("MESSAGE_CREATE", payload)
 
     expect(result).not_to have_key("embeds")
     expect(result).not_to have_key("nonce")
+    expect(result).not_to have_key("referenced_message")
     expect(result.dig("author", "id")).to eq("300")
   end
 
