@@ -115,7 +115,7 @@ RSpec.describe DiscordChatBridge::AdminController do
     DiscordChatBridge::Discord::Client
       .any_instance
       .expects(:channel)
-      .returns({ "id" => mapping.discord_channel_id, "guild_id" => "987654321" })
+      .returns({ "id" => mapping.discord_channel_id, "guild_id" => "987654321", "type" => 0 })
 
     post "/discord-chat-bridge/admin/test.json", params: { mapping_id: mapping.id }
 
@@ -123,6 +123,26 @@ RSpec.describe DiscordChatBridge::AdminController do
     expect(response.parsed_body["errors"]).to include(
       "Discord channel belongs to a different guild",
     )
+  end
+
+  it "rejects unsupported Discord channel types for inbound mappings" do
+    chat_channel = Fabricate(:chat_channel)
+    DiscordChatBridge::Discord::Client
+      .any_instance
+      .expects(:channel)
+      .returns({ "id" => "200", "guild_id" => "400", "type" => 15 })
+
+    post "/discord-chat-bridge/admin/mappings.json",
+         params: {
+           discord_guild_id: "400",
+           discord_channel_id: "200",
+           chat_channel_id: chat_channel.id,
+           direction: "discord_to_discourse",
+           enabled: true,
+         }
+
+    expect(response.status).to eq(422)
+    expect(response.parsed_body["errors"]).to include("Discord channel type is not supported")
   end
 
   it "tests an outbound-only mapping without requiring bot channel access" do

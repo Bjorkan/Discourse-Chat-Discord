@@ -26,7 +26,7 @@ module DiscordChatBridge
         channel = nil
         if mapping.inbound?
           channel = client.channel(mapping.discord_channel_id)
-          validate_remote_guild!(channel, mapping)
+          validate_remote_channel!(channel, mapping)
         end
         webhook = nil
         if mapping.outbound?
@@ -61,6 +61,8 @@ module DiscordChatBridge
       apply_webhook(mapping)
       mapping.activated_at = Time.zone.now
       raise ActiveRecord::RecordInvalid, mapping unless mapping.valid?
+      validate_remote_channel!(Discord::Client.new.channel(mapping.discord_channel_id), mapping) if
+        mapping.inbound?
       validate_remote_webhook!(mapping) if mapping.webhook_configured?
       mapping.save!
       render json: { mapping: serialize_mapping(mapping) }
@@ -82,6 +84,10 @@ module DiscordChatBridge
       if should_validate_webhook?(mapping)
         raise ActiveRecord::RecordInvalid, mapping unless mapping.valid?
         validate_remote_webhook!(mapping)
+      end
+      if should_validate_channel?(mapping)
+        raise ActiveRecord::RecordInvalid, mapping unless mapping.valid?
+        validate_remote_channel!(Discord::Client.new.channel(mapping.discord_channel_id), mapping)
       end
       mapping.activated_at = Time.zone.now if reactivating
       mapping.save!
@@ -170,6 +176,20 @@ module DiscordChatBridge
       return false unless mapping.outbound?
 
       mapping.discord_channel_id_changed? || mapping.direction_changed? || mapping.enabled_changed?
+    end
+
+    def should_validate_channel?(mapping)
+      return false unless mapping.inbound?
+
+      mapping.new_record? || mapping.discord_channel_id_changed? || mapping.direction_changed? ||
+        mapping.enabled_changed?
+    end
+
+    def validate_remote_channel!(channel, mapping)
+      validate_remote_guild!(channel, mapping)
+      return if channel["type"].to_i.in?([0, 5])
+
+      raise ArgumentError, "Discord channel type is not supported"
     end
 
     def validate_remote_webhook!(mapping, client: Discord::Client.new)
