@@ -72,7 +72,8 @@ module DiscordChatBridge
         mapping.record_success!
       rescue PermanentError => error
         mapping&.record_error!(error)
-        state.update!(processed_at: Time.zone.now, last_error: error.message.to_s.first(500))
+        state.update!(processed_at: nil, last_error: error.message.to_s.first(500))
+        raise
       rescue => error
         mapping&.record_error!(error)
         raise

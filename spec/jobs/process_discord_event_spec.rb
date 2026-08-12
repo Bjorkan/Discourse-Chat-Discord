@@ -295,6 +295,30 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     expect(DiscordChatBridge::MessageMapping.last.chat_message_id).to be_nil
   end
 
+  it "keeps permanently failed inbound events retryable" do
+    SiteSetting.discord_chat_bridge_max_attachment_mb = 10
+    oversized_payload =
+      discord_payload(
+        "attachments" =>
+          2.times.map do |index|
+            {
+              "id" => index.to_s,
+              "filename" => "file-#{index}",
+              "size" => 6.megabytes,
+              "url" => "https://cdn.discordapp.com/attachments/1/#{index}/file",
+            }
+          end,
+      )
+
+    expect { execute("MESSAGE_CREATE", oversized_payload, 1) }.to raise_error(
+      DiscordChatBridge::PermanentError,
+    )
+    expect(DiscordChatBridge::EventState.last).to have_attributes(
+      processed_at: nil,
+      last_error: "Attachments exceed the configured total Discord download limit",
+    )
+  end
+
   it "neutralizes mentions before Chat processing" do
     execute("MESSAGE_CREATE", discord_payload(content: "@admin @all @here"), 1)
     message = DiscordChatBridge::MessageMapping.last.chat_message
