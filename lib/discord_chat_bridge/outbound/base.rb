@@ -61,7 +61,8 @@ module DiscordChatBridge
         jump =
           if replied_mapping&.discord_message_id.present? &&
                !replied_mapping.discord_message_id.start_with?("pending:")
-            "https://discord.com/channels/#{mapping.discord_guild_id}/#{mapping.discord_channel_id}/#{replied_mapping.discord_message_id}"
+            replied_channel_mapping = replied_mapping.channel_mapping
+            "https://discord.com/channels/#{replied_channel_mapping.discord_guild_id}/#{replied_channel_mapping.discord_channel_id}/#{replied_mapping.discord_message_id}"
           end
         label = jump ? "[#{name}](#{jump})" : name
         "↳ #{label}: #{excerpt}"

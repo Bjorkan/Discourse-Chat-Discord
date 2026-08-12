@@ -108,6 +108,41 @@ RSpec.describe DiscordChatBridge::Outbound::CreateMessage do
     described_class.new(reply.id, client:).call
   end
 
+  it "links replies using the parent message's historical Discord channel" do
+    parent = Fabricate(:chat_message, chat_channel:, user:, message: "Original text")
+    Fabricate(
+      :discord_chat_bridge_message_mapping,
+      channel_mapping: mapping,
+      chat_message: parent,
+      discord_message_id: "601",
+      discord_channel_id: "200",
+      discourse_chat_channel_id: chat_channel.id,
+      origin: "discourse",
+    )
+    mapping.update!(enabled: false, archived_at: Time.zone.now)
+    replacement_mapping =
+      Fabricate.build(
+        :discord_chat_bridge_channel_mapping,
+        chat_channel:,
+        discord_channel_id: "201",
+        discord_guild_id: "401",
+        discord_webhook_id: "501",
+      )
+    replacement_mapping.webhook_token = "replacement-secret"
+    replacement_mapping.save!
+    reply = Fabricate(:chat_message, chat_channel:, user:, in_reply_to: parent, message: "Reply")
+
+    client
+      .expects(:execute_webhook)
+      .with do |args|
+        args[:webhook_id] == "501" &&
+          args.dig(:payload, :content).include?("https://discord.com/channels/400/200/601")
+      end
+      .returns({ "id" => "602", "attachments" => [] })
+
+    described_class.new(reply.id, client:).call
+  end
+
   it "keeps emoji-heavy previews within Discord's UTF-16 limit" do
     message.update!(message: "😀" * 1_200)
     client
