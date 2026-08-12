@@ -23,7 +23,9 @@ module DiscordChatBridge
 
       def mapping
         return unless message
-        @mapping ||= ChannelMapping.active.find_by(chat_channel_id: message.chat_channel_id)
+        @mapping ||=
+          existing_message_mapping&.channel_mapping ||
+            ChannelMapping.active.find_by(chat_channel_id: message.chat_channel_id)
       end
 
       def existing_message_mapping

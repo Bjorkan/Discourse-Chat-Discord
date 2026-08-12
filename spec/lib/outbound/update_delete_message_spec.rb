@@ -84,4 +84,26 @@ RSpec.describe DiscordChatBridge::Outbound::UpdateMessage do
       last_error: nil,
     )
   end
+
+  it "does not edit a historical Discord message through a replacement webhook" do
+    channel_mapping.update!(enabled: false, archived_at: Time.zone.now)
+    replacement_mapping =
+      Fabricate.build(
+        :discord_chat_bridge_channel_mapping,
+        chat_channel:,
+        discord_channel_id: "201",
+        discord_webhook_id: "501",
+      )
+    replacement_mapping.webhook_token = "replacement-token"
+    replacement_mapping.save!
+    message.update!(message: "Edited after remapping")
+    client.expects(:edit_webhook_message).never
+
+    DiscordChatBridge::Outbound::UpdateMessage.new(message.id, client:).call
+
+    expect(message_mapping.reload).to have_attributes(
+      discord_message_id: "600",
+      payload_digest: "old",
+    )
+  end
 end
