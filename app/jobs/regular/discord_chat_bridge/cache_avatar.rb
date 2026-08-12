@@ -31,10 +31,26 @@ module Jobs
           ).create_for(::DiscordChatBridge::BRIDGE_USER_ID)
         if upload.persisted?
           identity.reload
-          identity.update!(avatar_upload: upload) if identity.avatar_url == avatar_url
+          if identity.avatar_url == avatar_url
+            identity.update!(avatar_upload: upload)
+            remove_previous_upload(args[:previous_avatar_upload_id], identity)
+          end
         end
       ensure
         tempfile&.close!
+      end
+
+      private
+
+      def remove_previous_upload(upload_id, identity)
+        return if upload_id.blank? || upload_id.to_i == identity.avatar_upload_id
+
+        upload = Upload.find_by(id: upload_id)
+        return unless upload
+        return if ::DiscordChatBridge::Identity.where(avatar_upload_id: upload.id).exists?
+        return if upload.upload_references.exists?
+
+        upload.destroy!
       end
     end
   end
