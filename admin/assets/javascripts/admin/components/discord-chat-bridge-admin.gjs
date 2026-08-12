@@ -5,7 +5,7 @@ import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import { or } from "discourse/truth-helpers";
+import { eq, or } from "discourse/truth-helpers";
 import DButton from "discourse/ui-kit/d-button";
 import DPageSubheader from "discourse/ui-kit/d-page-subheader";
 import DToggleSwitch from "discourse/ui-kit/d-toggle-switch";
@@ -22,6 +22,7 @@ export default class DiscordChatBridgeAdmin extends Component {
   @tracked loading = false;
   @tracked botToken = "";
   @tracked testResult;
+  @tracked testedMappingId;
   @tracked guildId = "";
   @tracked discordChannelId = "";
   @tracked chatChannelId = "";
@@ -164,11 +165,13 @@ export default class DiscordChatBridgeAdmin extends Component {
   @action
   async testMapping(mapping) {
     this.loading = true;
+    this.testedMappingId = null;
     try {
       await ajax("/discord-chat-bridge/admin/test", {
         type: "POST",
         data: { mapping_id: mapping.id },
       });
+      this.testedMappingId = mapping.id;
     } catch (error) {
       popupAjaxError(error);
     } finally {
@@ -474,6 +477,11 @@ export default class DiscordChatBridgeAdmin extends Component {
                           @disabled={{this.loading}}
                           class="btn-small"
                         />
+                        {{#if (eq this.testedMappingId mapping.id)}}
+                          <span class="is-healthy">{{i18n
+                              "discord_chat_bridge.admin.test_passed"
+                            }}</span>
+                        {{/if}}
                         <DButton
                           @action={{fn this.disableMapping mapping}}
                           @label="discord_chat_bridge.admin.delete"

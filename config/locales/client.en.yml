@@ -27,6 +27,7 @@ en:
         save_token: "Save token"
         test_connection: "Test Discord connection"
         test_mapping: "Test mapping"
+        test_passed: "Test passed"
         reconnect: "Request reconnect"
         add_mapping: "Add mapping"
         guild_id: "Guild ID"
