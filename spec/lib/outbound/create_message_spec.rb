@@ -57,6 +57,14 @@ RSpec.describe DiscordChatBridge::Outbound::CreateMessage do
     expect(DiscordChatBridge::MessageMapping.last.delivery_status).to eq("ambiguous")
   end
 
+  it "keeps the delivery retryable when the client fails before starting the request" do
+    client.expects(:execute_webhook).raises("local client failure")
+
+    expect { described_class.new(message.id, client:).call }.to raise_error("local client failure")
+
+    expect(DiscordChatBridge::MessageMapping.last.delivery_status).to eq("pending")
+  end
+
   it "skips Discord-origin messages and the technical actor" do
     ensure_bridge_actor
     external =

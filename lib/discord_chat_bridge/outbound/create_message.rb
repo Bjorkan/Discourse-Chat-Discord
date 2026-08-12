@@ -22,21 +22,23 @@ module DiscordChatBridge
         }.compact
         webhook_token = mapping.webhook_token
 
-        # Finish all local preparation before entering the ambiguous-delivery window. Once the
-        # request starts, a lost response can no longer prove whether Discord accepted it.
+        # Validate serialization before the client opens a connection. The callback narrows the
+        # ambiguous window to the actual HTTP exchange.
         JSON.generate(payload)
 
-        message_mapping.update!(
-          delivery_status: "ambiguous",
-          last_error: "Webhook delivery is in progress; reconcile before retrying if interrupted",
-        )
         response =
           @client.execute_webhook(
             webhook_id: mapping.discord_webhook_id,
             token: webhook_token,
             payload: payload,
             files: files,
-          )
+          ) do
+            message_mapping.update!(
+              delivery_status: "ambiguous",
+              last_error:
+                "Webhook delivery is in progress; reconcile before retrying if interrupted",
+            )
+          end
         message_mapping.update!(
           discord_message_id: response.fetch("id"),
           delivery_status: "delivered",
