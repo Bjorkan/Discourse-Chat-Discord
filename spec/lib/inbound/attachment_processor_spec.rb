@@ -38,4 +38,14 @@ RSpec.describe DiscordChatBridge::Inbound::AttachmentProcessor do
       described_class.signature([refreshed], include_url: true),
     )
   end
+
+  it "rejects attachments that exceed the aggregate download budget" do
+    SiteSetting.discord_chat_bridge_max_attachment_mb = 10
+    attachments = 2.times.map { { "filename" => "file", "size" => 6.megabytes } }
+
+    expect { described_class.new.call(attachments) }.to raise_error(
+      DiscordChatBridge::PermanentError,
+      "Attachments exceed the configured total Discord download limit",
+    )
+  end
 end

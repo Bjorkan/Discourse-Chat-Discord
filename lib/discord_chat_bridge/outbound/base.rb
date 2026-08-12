@@ -118,6 +118,9 @@ module DiscordChatBridge
         if uploads.length > max_files
           raise PermanentError, "Discord accepts at most #{max_files} files for this message"
         end
+        if uploads.sum { |upload| upload.filesize.to_i } > max_bytes
+          raise PermanentError, "Attachments exceed the configured total Discord upload limit"
+        end
 
         files = []
         uploads.each do |upload|

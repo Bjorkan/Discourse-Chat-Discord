@@ -17,11 +17,16 @@ module DiscordChatBridge
       end
 
       def call(attachments)
+        attachments = Array(attachments)
+        max_bytes = SiteSetting.discord_chat_bridge_max_attachment_mb.megabytes
+        if attachments.sum { |attachment| attachment.to_h["size"].to_i } > max_bytes
+          raise PermanentError, "Attachments exceed the configured total Discord download limit"
+        end
         upload_ids = []
         markdown = []
         records = []
 
-        Array(attachments).each do |attachment|
+        attachments.each do |attachment|
           result = process(attachment)
           upload_ids << result[:upload].id if result[:upload]
           markdown << result[:markdown]

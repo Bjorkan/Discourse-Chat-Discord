@@ -63,6 +63,19 @@ RSpec.describe DiscordChatBridge::Outbound::Base do
     )
   end
 
+  it "rejects attachments that exceed the aggregate upload budget" do
+    SiteSetting.discord_chat_bridge_max_attachment_mb = 10
+    uploads = 2.times.map { |index| stub(id: index, filesize: 6.megabytes) }
+    message = stub(id: 123, uploads: uploads)
+    outbound = described_class.new(123)
+    outbound.stubs(:message).returns(message)
+
+    expect { outbound.send(:upload_files) }.to raise_error(
+      DiscordChatBridge::PermanentError,
+      "Attachments exceed the configured total Discord upload limit",
+    )
+  end
+
   it "does not discard the tenth upload to attach a long message" do
     message = stub(id: 123, uploads: Array.new(10) { stub })
     outbound = described_class.new(123)
