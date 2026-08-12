@@ -80,4 +80,16 @@ RSpec.describe DiscordChatBridge::ChannelMapping do
       "Channel endpoints cannot be changed after messages have been bridged; create a new mapping",
     )
   end
+
+  it "can record success without hiding an unresolved event error" do
+    mapping = Fabricate(:discord_chat_bridge_channel_mapping)
+    mapping.record_error!(DiscordChatBridge::PermanentError.new("lost message"))
+
+    mapping.record_success!(clear_error: false)
+
+    expect(mapping.reload).to have_attributes(
+      last_success_at: be_present,
+      last_error_message: "lost message",
+    )
+  end
 end

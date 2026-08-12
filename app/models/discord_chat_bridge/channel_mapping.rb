@@ -61,13 +61,12 @@ module DiscordChatBridge
       self.encrypted_discord_webhook_token = token.present? ? Encryption.encrypt(token) : nil
     end
 
-    def record_success!
-      update_columns(
-        last_success_at: Time.zone.now,
-        last_error_at: nil,
-        last_error_code: nil,
-        last_error_message: nil,
-      )
+    def record_success!(clear_error: true)
+      values = { last_success_at: Time.zone.now }
+      if clear_error
+        values.merge!(last_error_at: nil, last_error_code: nil, last_error_message: nil)
+      end
+      update_columns(values)
     end
 
     def record_error!(error)
