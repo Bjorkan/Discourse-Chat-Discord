@@ -58,6 +58,17 @@ RSpec.describe DiscordChatBridge::ChannelMapping do
     expect(mapping.errors[:activated_at]).to be_present
   end
 
+  it "rejects private Chat direct messages" do
+    mapping =
+      Fabricate.build(
+        :discord_chat_bridge_channel_mapping,
+        chat_channel: Fabricate(:direct_message_channel),
+      )
+
+    expect(mapping).not_to be_valid
+    expect(mapping.errors[:chat_channel]).to include("must be a public category channel")
+  end
+
   it "keeps channel endpoints immutable after messages have been bridged" do
     mapping = Fabricate(:discord_chat_bridge_channel_mapping)
     Fabricate(:discord_chat_bridge_message_mapping, channel_mapping: mapping)

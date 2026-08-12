@@ -35,6 +35,7 @@ module DiscordChatBridge
     validate :webhook_present_for_outbound
     validate :webhook_credentials_are_complete
     validate :enabled_mapping_is_not_archived
+    validate :chat_channel_is_public
     validate :endpoints_are_immutable_after_messages_exist, on: :update
 
     scope :active, -> { where(enabled: true, archived_at: nil) }
@@ -103,6 +104,12 @@ module DiscordChatBridge
     def enabled_mapping_is_not_archived
       if enabled? && archived_at
         errors.add(:archived_at, "must be blank while the mapping is enabled")
+      end
+    end
+
+    def chat_channel_is_public
+      if chat_channel&.direct_message_channel?
+        errors.add(:chat_channel, "must be a public category channel")
       end
     end
 
