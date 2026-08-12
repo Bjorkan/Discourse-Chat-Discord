@@ -18,6 +18,10 @@ module DiscordChatBridge
       content.to_s.encode("UTF-8", invalid: :replace, undef: :replace, replace: "?")
     end
 
+    def self.escape_discord_link_text(value)
+      value.to_s.gsub(/\s+/, " ").strip.gsub(/[\\\[\]()]/) { |character| "\\#{character}" }
+    end
+
     def self.digest(payload)
       Digest::SHA256.hexdigest(JSON.generate(canonicalize(payload)))
     end

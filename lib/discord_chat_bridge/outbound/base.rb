@@ -57,6 +57,7 @@ module DiscordChatBridge
         name =
           replied_mapping&.author_display_name.presence || replied.user&.name.presence ||
             replied.user&.username || "Unknown"
+        name = Formatting.escape_discord_link_text(name)
         excerpt = replied.build_excerpt.to_s.gsub(/\s+/, " ").first(120)
         jump =
           if replied_mapping&.discord_message_id.present? &&
