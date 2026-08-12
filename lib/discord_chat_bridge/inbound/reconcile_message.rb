@@ -38,6 +38,10 @@ module DiscordChatBridge
           state.update!(processed_at: Time.zone.now, last_error: nil)
           return
         end
+        if message_mapping.blank? && event_predates_mapping?(state, mapping)
+          state.update!(processed_at: Time.zone.now, last_error: nil)
+          return
+        end
 
         if message_mapping&.origin == "discourse"
           if state.discord_deleted_at && message_mapping.deleted_on_discord_at.blank?
@@ -242,6 +246,11 @@ module DiscordChatBridge
         Time.zone.parse(value) if value.present?
       rescue ArgumentError
         nil
+      end
+
+      def event_predates_mapping?(state, mapping)
+        event_time = parse_time(state.payload["timestamp"])
+        event_time.present? && event_time < mapping.activated_at
       end
 
     end

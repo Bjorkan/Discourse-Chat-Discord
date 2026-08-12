@@ -73,6 +73,15 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     expect(DiscordChatBridge::EventState.last.processed_at).to be_present
   end
 
+  it "ignores an unmapped create from before the mapping activation" do
+    mapping.update!(activated_at: 1.hour.ago)
+
+    execute("MESSAGE_CREATE", discord_payload("timestamp" => 2.hours.ago.iso8601), 1)
+
+    expect(DiscordChatBridge::MessageMapping.all).to be_empty
+    expect(DiscordChatBridge::EventState.last.processed_at).to be_present
+  end
+
   it "reuses imported attachment state for a text-only edit" do
     payload =
       discord_payload(
