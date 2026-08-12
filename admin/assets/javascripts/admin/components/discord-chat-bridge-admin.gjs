@@ -448,16 +448,20 @@ export default class DiscordChatBridgeAdmin extends Component {
                         )
                       }}</td>
                     <td>
-                      {{#if mapping.last_error_at}}
-                        <span
-                          class="is-unhealthy"
-                          title={{mapping.last_error_message}}
-                        >{{i18n "discord_chat_bridge.admin.error"}}</span>
+                      {{#if mapping.enabled}}
+                        {{#if mapping.last_error_at}}
+                          <span
+                            class="is-unhealthy"
+                            title={{mapping.last_error_message}}
+                          >{{i18n "discord_chat_bridge.admin.error"}}</span>
+                        {{else}}
+                          <span class="is-healthy">{{i18n
+                              "discord_chat_bridge.admin.ready"
+                            }}</span>
+                        {{/if}}
                       {{else}}
-                        <span class="is-healthy">{{if
-                            mapping.enabled
-                            (i18n "discord_chat_bridge.admin.ready")
-                            (i18n "discord_chat_bridge.admin.disabled")
+                        <span class="is-healthy">{{i18n
+                            "discord_chat_bridge.admin.disabled"
                           }}</span>
                       {{/if}}
                     </td>
