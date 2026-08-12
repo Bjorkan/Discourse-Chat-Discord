@@ -44,5 +44,6 @@ RSpec.describe DiscordChatBridge::ThreadPreviewSerializerExtension do
     expect(serializer.participant_users.map(&:id)).to contain_exactly(
       *identities.map(&:browser_user_id),
     )
+    expect(serializer.participant_count).to eq(2)
   end
 end
