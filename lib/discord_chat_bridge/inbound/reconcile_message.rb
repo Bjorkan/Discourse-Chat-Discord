@@ -33,6 +33,10 @@ module DiscordChatBridge
             discord_channel_id: state.discord_channel_id,
             discord_message_id: state.discord_message_id,
           )
+        if message_mapping && message_mapping.channel_mapping_id != mapping.id
+          state.update!(processed_at: Time.zone.now, last_error: nil)
+          return
+        end
 
         if message_mapping&.origin == "discourse" ||
              message_mapping&.deleted_on_discourse_at.present?

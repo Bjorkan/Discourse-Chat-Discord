@@ -53,6 +53,25 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     )
   end
 
+  it "does not adopt historical messages when a Discord channel is remapped" do
+    execute("MESSAGE_CREATE", discord_payload, 1)
+    original_message = DiscordChatBridge::MessageMapping.last.chat_message
+    mapping.update!(enabled: false, archived_at: Time.zone.now)
+    replacement_channel = Fabricate(:chat_channel)
+    Fabricate(
+      :discord_chat_bridge_channel_mapping,
+      chat_channel: replacement_channel,
+      discord_channel_id: "200",
+      direction: "discord_to_discourse",
+    )
+
+    execute("MESSAGE_UPDATE", discord_payload(content: "Wrong destination"), 2)
+
+    expect(original_message.reload.message).to eq("Hello")
+    expect(Chat::Message.where(chat_channel_id: replacement_channel.id)).to be_empty
+    expect(DiscordChatBridge::EventState.last.processed_at).to be_present
+  end
+
   it "reuses imported attachment state for a text-only edit" do
     payload =
       discord_payload(
