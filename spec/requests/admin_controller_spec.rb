@@ -41,6 +41,12 @@ RSpec.describe DiscordChatBridge::AdminController do
     expect(response.status).to eq(404).or eq(403)
   end
 
+  it "returns not found for a missing mapping" do
+    post "/discord-chat-bridge/admin/test.json", params: { mapping_id: -1 }
+
+    expect(response.status).to eq(404)
+  end
+
   it "reactivates an archived mapping and verifies its stored outbound webhook" do
     mapping =
       Fabricate.build(

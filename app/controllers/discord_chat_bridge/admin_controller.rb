@@ -47,6 +47,8 @@ module DiscordChatBridge
 
       bot = Discord::Client.new.current_user
       render json: { ok: true, bot: { id: bot["id"], username: bot["username"] } }
+    rescue ActiveRecord::RecordNotFound => error
+      render_json_error safe_error(error), status: 404
     rescue => error
       render_json_error safe_error(error), status: 422
     end
@@ -92,8 +94,9 @@ module DiscordChatBridge
       mapping.activated_at = Time.zone.now if reactivating
       mapping.save!
       render json: { mapping: serialize_mapping(mapping) }
+    rescue ActiveRecord::RecordNotFound => error
+      render_json_error safe_error(error), status: 404
     rescue ActiveRecord::RecordInvalid,
-           ActiveRecord::RecordNotFound,
            ActiveRecord::RecordNotUnique,
            ArgumentError,
            PermanentError => error
@@ -106,7 +109,9 @@ module DiscordChatBridge
       mapping = ChannelMapping.find(params[:id])
       mapping.update!(enabled: false, archived_at: Time.zone.now)
       render json: { mapping: serialize_mapping(mapping) }
-    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound => error
+    rescue ActiveRecord::RecordNotFound => error
+      render_json_error safe_error(error), status: 404
+    rescue ActiveRecord::RecordInvalid => error
       render_json_error safe_error(error), status: 422
     end
 
