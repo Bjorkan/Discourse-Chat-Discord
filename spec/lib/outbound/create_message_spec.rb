@@ -124,6 +124,7 @@ RSpec.describe DiscordChatBridge::Outbound::CreateMessage do
       Fabricate.build(
         :discord_chat_bridge_channel_mapping,
         chat_channel:,
+        direction: "discourse_to_discord",
         discord_channel_id: "201",
         discord_guild_id: "401",
         discord_webhook_id: "501",

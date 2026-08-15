@@ -110,6 +110,7 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
               "filename" => "notes.txt",
               "content_type" => "text/plain",
               "size" => 5,
+              "url" => "https://cdn.discordapp.com/attachments/1/2/notes.txt",
               "upload_id" => nil,
               "markdown" => "[notes.txt](https://cdn.discordapp.com/attachments/1/2/notes.txt)",
             },
@@ -157,8 +158,10 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
 
     expect(DiscordChatBridge::MessageMapping.last.reload).to have_attributes(
       author_display_name: "Renamed in guild",
-      author_avatar_url:
-        "https://cdn.discordapp.com/guilds/400/users/300/avatars/guild-avatar.png?size=128",
+      author_avatar_url: "/discord-chat-bridge/avatar/300/{size}.png",
+    )
+    expect(DiscordChatBridge::Identity.last.reload.avatar_url).to eq(
+      "https://cdn.discordapp.com/guilds/400/users/300/avatars/guild-avatar.png?size=128",
     )
   end
 

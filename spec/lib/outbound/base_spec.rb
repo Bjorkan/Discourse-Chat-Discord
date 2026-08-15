@@ -32,12 +32,7 @@ RSpec.describe DiscordChatBridge::Outbound::Base do
   it "fails the whole preparation when an attachment is unavailable" do
     SiteSetting.discord_chat_bridge_max_attachment_mb = 10
     upload =
-      stub(
-        id: 456,
-        filesize: 100,
-        original_filename: "missing.txt",
-        content_type: "text/plain",
-      )
+      stub(id: 456, filesize: 100, original_filename: "missing.txt", content_type: "text/plain")
     message = stub(id: 123, uploads: [upload])
     store = mock
     store.expects(:path_for).with(upload).returns(nil)

@@ -21,6 +21,8 @@ RSpec.describe DiscordChatBridge::Health do
     described_class.update_gateway(connected: true, last_ready_at: Time.zone.now.iso8601)
     active_health = Discourse.redis.get(described_class::KEY)
 
+    expect(Discourse.redis.without_namespace.get(described_class::KEY)).to be_nil
+
     described_class.record_standby!
 
     expect(Discourse.redis.get(described_class::KEY)).to eq(active_health)

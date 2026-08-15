@@ -3,9 +3,7 @@
 RSpec.describe DiscordChatBridge::ThreadPreviewSerializerExtension do
   fab!(:chat_channel) { Fabricate(:chat_channel, threading_enabled: true) }
   fab!(:thread) { Fabricate(:chat_thread, channel: chat_channel) }
-  fab!(:mapping) do
-    Fabricate(:discord_chat_bridge_channel_mapping, chat_channel:)
-  end
+  fab!(:mapping) { Fabricate(:discord_chat_bridge_channel_mapping, chat_channel:) }
 
   before { ensure_bridge_actor }
 

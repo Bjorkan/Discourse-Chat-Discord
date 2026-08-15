@@ -9,6 +9,10 @@ RSpec.describe DiscordChatBridge::Discord::LeaderLease do
 
     expect(first.acquire).to eq(true)
     expect(second.acquire).to eq(false)
+
+    first.release
+
+    expect(second.acquire).to eq(true)
   ensure
     first&.release
     second&.release

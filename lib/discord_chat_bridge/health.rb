@@ -44,7 +44,7 @@ module DiscordChatBridge
       encoded =
         Discourse.redis.eval(
           UPDATE_SCRIPT,
-          keys: [KEY],
+          keys: [Discourse.redis.namespace_key(KEY)],
           argv: [JSON.generate(updates), 5.minutes.to_i],
         )
       JSON.parse(encoded)
