@@ -18,6 +18,7 @@ module DiscordChatBridge
         @lease_lost = lease_lost
         @session = Health.session
         @backoff = 1.0
+        @send_mutex = Mutex.new
         @last_reconnect_request = Discourse.redis.get(Health::RECONNECT_KEY)
       end
 
@@ -90,9 +91,7 @@ module DiscordChatBridge
         websocket.on(:error) { |event| guard_callback("error") { handle_error(event) } }
         websocket.on(:close) { |event| guard_callback("close") { handle_close(event) } }
         websocket.on(:open) do
-          guard_callback("open") do
-            Health.update_gateway(connected: true, connecting: false, last_error: nil)
-          end
+          guard_callback("open") { Health.update_gateway(websocket_open: true) }
         end
       end
 
@@ -135,7 +134,7 @@ module DiscordChatBridge
         when 0
           handle_dispatch(payload)
         when 1
-          heartbeat
+          heartbeat(track_ack: false)
         when 7
           close_for_resume
         when 9
@@ -164,6 +163,7 @@ module DiscordChatBridge
 
         case type
         when "READY"
+          @session["generation"] = Health.next_session_generation
           @session["session_id"] = data["session_id"]
           @session["resume_gateway_url"] = data["resume_gateway_url"]
           @session["bot_user_id"] = data.dig("user", "id")
@@ -171,8 +171,11 @@ module DiscordChatBridge
           persist_session
           Health.update_gateway(
             connected: true,
+            connecting: false,
+            websocket_open: true,
             session_resumable: true,
             bot_user_id: @session["bot_user_id"],
+            last_error: nil,
             last_ready_at: Time.zone.now.iso8601,
           )
         when "RESUMED"
@@ -180,7 +183,10 @@ module DiscordChatBridge
           persist_session
           Health.update_gateway(
             connected: true,
+            connecting: false,
+            websocket_open: true,
             session_resumable: true,
+            last_error: nil,
             last_resumed_at: Time.zone.now.iso8601,
           )
         when "MESSAGE_CREATE", "MESSAGE_UPDATE", "MESSAGE_DELETE", "MESSAGE_DELETE_BULK"
@@ -201,6 +207,7 @@ module DiscordChatBridge
           payload: EventNormalizer.call(type, data),
           gateway_sequence: sequence,
           gateway_session_id: @session["session_id"],
+          gateway_session_generation: @session["generation"],
         )
       end
 
@@ -252,9 +259,10 @@ module DiscordChatBridge
           end
       end
 
-      def heartbeat
-        @heartbeat_acknowledged = false
+      def heartbeat(track_ack: true)
+        @heartbeat_acknowledged = false if track_ack
         send_payload(op: 1, d: @session["sequence"])
+        Health.refresh_session
         Health.update_gateway(last_heartbeat_at: Time.zone.now.iso8601)
       end
 
@@ -274,6 +282,7 @@ module DiscordChatBridge
       end
 
       def resume
+        @session["generation"] ||= Health.next_session_generation
         send_payload(
           op: 6,
           d: {
@@ -285,7 +294,7 @@ module DiscordChatBridge
       end
 
       def send_payload(payload)
-        @websocket.send(JSON.generate(payload))
+        @send_mutex.synchronize { @websocket.send(JSON.generate(payload)) }
       end
 
       def gateway_url
@@ -293,7 +302,20 @@ module DiscordChatBridge
           if resumable?
             @session["resume_gateway_url"]
           else
-            @client.gateway_bot.fetch("url")
+            gateway_configuration = @client.gateway_bot
+            if gateway_configuration["shards"].to_i > 1
+              raise PermanentError,
+                    "Discord requires #{gateway_configuration["shards"]} Gateway shards, which this bridge does not support"
+            end
+            session_limit = gateway_configuration["session_start_limit"] || {}
+            if session_limit["remaining"].to_i <= 0 && session_limit.key?("remaining")
+              retry_after = [session_limit["reset_after"].to_f / 1000.0, 1].max
+              raise RetryableError.new(
+                      "Discord Gateway session start limit is exhausted",
+                      retry_after:,
+                    )
+            end
+            gateway_configuration.fetch("url")
           end
         uri = URI(base)
         valid_host = uri.host == "gateway.discord.gg" || uri.host&.end_with?(".discord.gg")
@@ -314,7 +336,13 @@ module DiscordChatBridge
 
       def persist_session
         Health.save_session(
-          @session.slice("session_id", "sequence", "resume_gateway_url", "bot_user_id"),
+          @session.slice(
+            "session_id",
+            "sequence",
+            "resume_gateway_url",
+            "bot_user_id",
+            "generation",
+          ),
         )
       end
 
@@ -393,7 +421,7 @@ module DiscordChatBridge
       end
 
       def safely_mark_disconnected
-        Health.update_gateway(connected: false, connecting: false)
+        Health.update_gateway(connected: false, connecting: false, websocket_open: false)
       rescue => error
         Rails.logger.warn(
           "#{Log.prefix(operation: "health", direction: "gateway")} " \

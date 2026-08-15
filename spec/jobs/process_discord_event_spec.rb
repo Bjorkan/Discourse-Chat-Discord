@@ -16,12 +16,13 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     ensure_bridge_actor
   end
 
-  def execute(type, payload, sequence, session_id = nil)
+  def execute(type, payload, sequence, session_id = nil, session_generation = nil)
     described_class.new.execute(
       event_type: type,
       payload: payload,
       gateway_sequence: sequence,
       gateway_session_id: session_id,
+      gateway_session_generation: session_generation,
     )
   end
 
@@ -38,6 +39,7 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     2.times { execute("MESSAGE_CREATE", discord_payload, 1) }
     expect(DiscordChatBridge::MessageMapping.count).to eq(1)
     expect(Chat::Message.where(user_id: DiscordChatBridge::BRIDGE_USER_ID).count).to eq(1)
+    expect(DiscordChatBridge::EventState.last.processing_attempts).to eq(2)
   end
 
   it "updates the existing Chat message for MESSAGE_UPDATE" do
@@ -51,6 +53,34 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     expect(DiscordChatBridge::MessageMapping.last.chat_message.reload.message).to eq(
       "Hello everyone",
     )
+  end
+
+  it "does not adopt historical messages when a Discord channel is remapped" do
+    execute("MESSAGE_CREATE", discord_payload, 1)
+    original_message = DiscordChatBridge::MessageMapping.last.chat_message
+    mapping.update!(enabled: false, archived_at: Time.zone.now)
+    replacement_channel = Fabricate(:chat_channel)
+    Fabricate(
+      :discord_chat_bridge_channel_mapping,
+      chat_channel: replacement_channel,
+      discord_channel_id: "200",
+      direction: "discord_to_discourse",
+    )
+
+    execute("MESSAGE_UPDATE", discord_payload(content: "Wrong destination"), 2)
+
+    expect(original_message.reload.message).to eq("Hello")
+    expect(Chat::Message.where(chat_channel_id: replacement_channel.id)).to be_empty
+    expect(DiscordChatBridge::EventState.last.processed_at).to be_present
+  end
+
+  it "ignores an unmapped create from before the mapping activation" do
+    mapping.update!(activated_at: 1.hour.ago)
+
+    execute("MESSAGE_CREATE", discord_payload("timestamp" => 2.hours.ago.iso8601), 1)
+
+    expect(DiscordChatBridge::MessageMapping.all).to be_empty
+    expect(DiscordChatBridge::EventState.last.processed_at).to be_present
   end
 
   it "reuses imported attachment state for a text-only edit" do
@@ -80,6 +110,7 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
               "filename" => "notes.txt",
               "content_type" => "text/plain",
               "size" => 5,
+              "url" => "https://cdn.discordapp.com/attachments/1/2/notes.txt",
               "upload_id" => nil,
               "markdown" => "[notes.txt](https://cdn.discordapp.com/attachments/1/2/notes.txt)",
             },
@@ -102,6 +133,36 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     execute("MESSAGE_UPDATE", { "id" => "100", "channel_id" => "200" }, 2)
 
     expect(DiscordChatBridge::MessageMapping.last.chat_message.reload.message).to eq("Fetched edit")
+  end
+
+  it "preserves guild identity fields from a partial update" do
+    execute("MESSAGE_CREATE", discord_payload("member" => { "nick" => "Guild Alice" }), 1)
+    DiscordChatBridge::Discord::Client
+      .any_instance
+      .expects(:message)
+      .returns(discord_payload(content: "Fetched edit").except("member"))
+
+    execute(
+      "MESSAGE_UPDATE",
+      {
+        "id" => "100",
+        "channel_id" => "200",
+        "guild_id" => "400",
+        "member" => {
+          "nick" => "Renamed in guild",
+          "avatar" => "guild-avatar",
+        },
+      },
+      2,
+    )
+
+    expect(DiscordChatBridge::MessageMapping.last.reload).to have_attributes(
+      author_display_name: "Renamed in guild",
+      author_avatar_url: "/discord-chat-bridge/avatar/300/{size}.png",
+    )
+    expect(DiscordChatBridge::Identity.last.reload.avatar_url).to eq(
+      "https://cdn.discordapp.com/guilds/400/users/300/avatars/guild-avatar.png?size=128",
+    )
   end
 
   it "trashes on delete and handles duplicate delete" do
@@ -134,6 +195,7 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     execute("MESSAGE_CREATE", discord_payload(:id => "103", "type" => 7), 4)
 
     expect(DiscordChatBridge::MessageMapping.all).to be_empty
+    expect(DiscordChatBridge::EventState.where(processed_at: nil)).to be_empty
   end
 
   it "uses nickname, then global name, and keeps identity stable through rename" do
@@ -154,6 +216,14 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
     expect(DiscordChatBridge::Identity.count).to eq(1)
     expect(DiscordChatBridge::Identity.last.display_name).to eq("Alice Cooper")
     expect(DiscordChatBridge::MessageMapping.first.author_display_name).to eq("Guild Alice")
+  end
+
+  it "uses Discord's default avatar for an author without a custom avatar" do
+    execute("MESSAGE_CREATE", discord_payload("author" => { "avatar" => nil }), 1)
+
+    expect(DiscordChatBridge::Identity.last.avatar_url).to eq(
+      "https://cdn.discordapp.com/embed/avatars/0.png",
+    )
   end
 
   it "creates native replies when the referenced message is mapped" do
@@ -185,8 +255,18 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
   end
 
   it "accepts a lower sequence after a fresh Gateway session" do
-    execute("MESSAGE_CREATE", discord_payload, 100, "session-a")
-    execute("MESSAGE_UPDATE", discord_payload(content: "New session edit"), 1, "session-b")
+    execute("MESSAGE_CREATE", discord_payload, 100, "session-a", 1)
+    execute("MESSAGE_UPDATE", discord_payload(content: "New session edit"), 1, "session-b", 2)
+
+    expect(DiscordChatBridge::MessageMapping.last.chat_message.reload.message).to eq(
+      "New session edit",
+    )
+  end
+
+  it "rejects a delayed event from an older Gateway session" do
+    execute("MESSAGE_CREATE", discord_payload, 100, "session-a", 1)
+    execute("MESSAGE_UPDATE", discord_payload(content: "New session edit"), 1, "session-b", 2)
+    execute("MESSAGE_UPDATE", discord_payload(content: "Delayed old edit"), 101, "session-a", 1)
 
     expect(DiscordChatBridge::MessageMapping.last.chat_message.reload.message).to eq(
       "New session edit",
@@ -207,6 +287,7 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
 
     execute("MESSAGE_DELETE", { "id" => "100", "channel_id" => "200" }, 1)
     expect(local.reload.deleted_at).to be_nil
+    expect(DiscordChatBridge::MessageMapping.last.deleted_on_discord_at).to be_present
   end
 
   it "does not recreate a Chat-retention tombstone" do
@@ -225,6 +306,30 @@ RSpec.describe Jobs::DiscordChatBridge::ProcessDiscordEvent do
 
     execute("MESSAGE_UPDATE", discord_payload(content: "Do not recreate"), 2)
     expect(DiscordChatBridge::MessageMapping.last.chat_message_id).to be_nil
+  end
+
+  it "keeps permanently failed inbound events retryable" do
+    SiteSetting.discord_chat_bridge_max_attachment_mb = 10
+    oversized_payload =
+      discord_payload(
+        "attachments" =>
+          2.times.map do |index|
+            {
+              "id" => index.to_s,
+              "filename" => "file-#{index}",
+              "size" => 6.megabytes,
+              "url" => "https://cdn.discordapp.com/attachments/1/#{index}/file",
+            }
+          end,
+      )
+
+    expect { execute("MESSAGE_CREATE", oversized_payload, 1) }.to raise_error(
+      DiscordChatBridge::PermanentError,
+    )
+    expect(DiscordChatBridge::EventState.last).to have_attributes(
+      processed_at: nil,
+      last_error: "Attachments exceed the configured total Discord download limit",
+    )
   end
 
   it "neutralizes mentions before Chat processing" do

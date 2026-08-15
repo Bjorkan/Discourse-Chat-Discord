@@ -4,10 +4,12 @@ module DiscordChatBridge
   module Inbound
     class AttachmentProcessor
       METADATA_KEYS = %w[id filename content_type size].freeze
+      RECORD_KEYS = [*METADATA_KEYS, "url"].freeze
       Result = Data.define(:upload_ids, :markdown, :records)
 
-      def self.signature(attachments)
-        Array(attachments).map { |attachment| attachment.to_h.slice(*METADATA_KEYS) }
+      def self.signature(attachments, include_url: false)
+        keys = include_url ? RECORD_KEYS : METADATA_KEYS
+        Array(attachments).map { |attachment| attachment.to_h.slice(*keys) }
       end
 
       def initialize(actor: User.find(BRIDGE_USER_ID))
@@ -15,17 +17,22 @@ module DiscordChatBridge
       end
 
       def call(attachments)
+        attachments = Array(attachments)
+        max_bytes = SiteSetting.discord_chat_bridge_max_attachment_mb.megabytes
+        if attachments.sum { |attachment| attachment.to_h["size"].to_i } > max_bytes
+          raise PermanentError, "Attachments exceed the configured total Discord download limit"
+        end
         upload_ids = []
         markdown = []
         records = []
 
-        Array(attachments).each do |attachment|
+        attachments.each do |attachment|
           result = process(attachment)
           upload_ids << result[:upload].id if result[:upload]
           markdown << result[:markdown]
           records << attachment
             .to_h
-            .slice(*METADATA_KEYS)
+            .slice(*RECORD_KEYS)
             .merge("upload_id" => result[:upload]&.id, "markdown" => result[:markdown])
         end
 

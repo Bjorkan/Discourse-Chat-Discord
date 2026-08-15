@@ -7,6 +7,7 @@ module DiscordChatBridge
 
     def show
       identity = Identity.find_by!(discord_user_id: params[:discord_user_id])
+      raise ActionController::RoutingError, "Not Found" unless avatar_size.between?(1, 512)
       target = avatar_target(identity)
       expires_in 1.hour, public: true
       redirect_to target, allow_other_host: true
@@ -22,7 +23,11 @@ module DiscordChatBridge
       end
 
       actor = User.find(BRIDGE_USER_ID)
-      URI.join(Discourse.base_url, actor.avatar_template.gsub("{size}", params[:size].to_s)).to_s
+      URI.join(Discourse.base_url, actor.avatar_template.gsub("{size}", avatar_size.to_s)).to_s
+    end
+
+    def avatar_size
+      @avatar_size ||= params[:size].to_i
     end
   end
 end

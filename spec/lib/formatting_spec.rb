@@ -23,6 +23,14 @@ RSpec.describe DiscordChatBridge::Formatting do
     end
   end
 
+  describe ".escape_discord_link_text" do
+    it "escapes names that could change a reply link" do
+      expect(described_class.escape_discord_link_text("[click](https://evil.test) ")).to eq(
+        "\\[click\\]\\(https://evil.test\\)",
+      )
+    end
+  end
+
   describe ".digest" do
     it "is stable when nested hash insertion order changes" do
       first = { outer: { "b" => 2, "a" => 1 } }

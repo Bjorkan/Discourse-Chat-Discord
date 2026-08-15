@@ -45,11 +45,13 @@ This repository is the complete application. It has no Node service, external da
 
 ## Deliberate Limitations
 
+- The Gateway daemon currently supports single-site Discourse installations only. On multisite it remains stopped with an explicit fatal health error; outbound webhook jobs are unaffected.
 - Discord controls edits and deletion of Discord-origin content. A local moderator edit to its mirrored Chat row remains local and is not sent to Discord. Normal operation does not require `MANAGE_MESSAGES`.
 - Discord's documented incoming webhook Execute API does not accept `message_reference`. Discourse replies therefore include a compact author/excerpt and a jump link when the target has a Discord mapping. The bridge does not sacrifice webhook identity overrides to emulate native replies through a bot.
 - Updating a webhook message cannot update that message's per-message username or avatar. Content and retained attachment IDs are updated.
 - Cross-platform reactions, typing, presence, read receipts, DMs, forum posts, voice, roles/groups, automatic channel creation, Discord thread creation, and history import are not implemented.
 - Long Discourse messages are posted with a preview and `message.txt` attachment on create. A later edit is truncated to Discord's 2,000-character limit because editing cannot add that deterministic text attachment without replacing existing files.
+- A long Discourse message can include at most nine uploads because `message.txt` occupies Discord's tenth file slot. The bridge rejects larger combinations instead of silently dropping an upload.
 - Discord signed attachment URLs expire. Successful imports are native Discourse uploads; safe CDN links are only a failure fallback.
 - Private Discourse avatar URLs cannot be fetched by Discord. Configure `discord_chat_bridge_public_base_url` and `discord_chat_bridge_avatar_fallback_url` for a public fallback.
 - An incoming webhook POST that times out after connection is fundamentally ambiguous because Discord offers no documented idempotency key for webhook execution. The bridge marks the delivery `ambiguous` and does not retry automatically, preventing duplicates. Resolve these entries operationally after inspecting Discord.

@@ -71,6 +71,10 @@ after_initialize do
   reloadable_patch { DiscordChatBridge::DiscourseIntegration.install_patches }
 
   Discourse::Application.routes.append do
+    get "/admin/plugins/discourse-discord-chat-bridge/bridge" => "admin/plugins#show",
+        :defaults => {
+          plugin_id: DiscordChatBridge::PLUGIN_NAME,
+        }
     mount ::DiscordChatBridge::Engine, at: "/discord-chat-bridge"
   end
 end

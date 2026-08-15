@@ -19,7 +19,33 @@ RSpec.describe DiscordChatBridge::Inbound::AttachmentProcessor do
     expect(result.upload_ids).to be_empty
     expect(result.records.first).to include(
       "filename" => "](@admin)\n@all.txt",
+      "url" => "https://example.com/private",
       "markdown" => result.markdown,
+    )
+  end
+
+  it "includes signed URLs only when comparing fallback attachment state" do
+    first = {
+      "id" => "1",
+      "filename" => "notes.txt",
+      "size" => 5,
+      "url" => "https://cdn.discordapp.com/attachments/1/2/notes.txt?ex=old",
+    }
+    refreshed = first.merge("url" => "https://cdn.discordapp.com/attachments/1/2/notes.txt?ex=new")
+
+    expect(described_class.signature([first])).to eq(described_class.signature([refreshed]))
+    expect(described_class.signature([first], include_url: true)).not_to eq(
+      described_class.signature([refreshed], include_url: true),
+    )
+  end
+
+  it "rejects attachments that exceed the aggregate download budget" do
+    SiteSetting.discord_chat_bridge_max_attachment_mb = 10
+    attachments = 2.times.map { { "filename" => "file", "size" => 6.megabytes } }
+
+    expect { described_class.new.call(attachments) }.to raise_error(
+      DiscordChatBridge::PermanentError,
+      "Attachments exceed the configured total Discord download limit",
     )
   end
 end

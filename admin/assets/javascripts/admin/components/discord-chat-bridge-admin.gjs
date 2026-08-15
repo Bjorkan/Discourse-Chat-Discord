@@ -5,7 +5,7 @@ import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import { or } from "discourse/truth-helpers";
+import { eq, or } from "discourse/truth-helpers";
 import DButton from "discourse/ui-kit/d-button";
 import DPageSubheader from "discourse/ui-kit/d-page-subheader";
 import DToggleSwitch from "discourse/ui-kit/d-toggle-switch";
@@ -22,6 +22,7 @@ export default class DiscordChatBridgeAdmin extends Component {
   @tracked loading = false;
   @tracked botToken = "";
   @tracked testResult;
+  @tracked testedMappingId;
   @tracked guildId = "";
   @tracked discordChannelId = "";
   @tracked chatChannelId = "";
@@ -37,6 +38,23 @@ export default class DiscordChatBridgeAdmin extends Component {
 
   get gatewayConnected() {
     return this.state.gateway?.connected;
+  }
+
+  get gatewayStatusLabel() {
+    const gateway = this.state.gateway ?? {};
+    let status = "disconnected";
+    if (gateway.fatal) {
+      status = "fatal";
+    } else if (gateway.connected) {
+      status = "connected";
+    } else if (gateway.connecting) {
+      status = "connecting";
+    } else if (gateway.waiting) {
+      status = "waiting";
+    } else if (gateway.standby) {
+      status = "standby";
+    }
+    return i18n(`discord_chat_bridge.admin.${status}`);
   }
 
   get hasMappings() {
@@ -106,6 +124,7 @@ export default class DiscordChatBridgeAdmin extends Component {
     this.loading = true;
     try {
       await ajax("/discord-chat-bridge/admin/reconnect", { type: "POST" });
+      this.state = await ajax("/discord-chat-bridge/admin");
     } catch (error) {
       popupAjaxError(error);
     } finally {
@@ -146,11 +165,13 @@ export default class DiscordChatBridgeAdmin extends Component {
   @action
   async testMapping(mapping) {
     this.loading = true;
+    this.testedMappingId = null;
     try {
       await ajax("/discord-chat-bridge/admin/test", {
         type: "POST",
         data: { mapping_id: mapping.id },
       });
+      this.testedMappingId = mapping.id;
     } catch (error) {
       popupAjaxError(error);
     } finally {
@@ -263,11 +284,7 @@ export default class DiscordChatBridgeAdmin extends Component {
           <strong
             class={{if this.gatewayConnected "is-healthy" "is-unhealthy"}}
           >
-            {{if
-              this.gatewayConnected
-              (i18n "discord_chat_bridge.admin.connected")
-              (i18n "discord_chat_bridge.admin.disconnected")
-            }}
+            {{this.gatewayStatusLabel}}
           </strong>
         </div>
         <div>
@@ -277,6 +294,25 @@ export default class DiscordChatBridgeAdmin extends Component {
           <strong>{{or
               this.state.gateway.last_event_at
               (i18n "discord_chat_bridge.admin.never")
+            }}</strong>
+        </div>
+        <div>
+          <span class="discord-chat-bridge-status__label">{{i18n
+              "discord_chat_bridge.admin.last_heartbeat_ack"
+            }}</span>
+          <strong>{{or
+              this.state.gateway.last_heartbeat_ack_at
+              (i18n "discord_chat_bridge.admin.never")
+            }}</strong>
+        </div>
+        <div>
+          <span class="discord-chat-bridge-status__label">{{i18n
+              "discord_chat_bridge.admin.resume_state"
+            }}</span>
+          <strong>{{if
+              this.state.gateway.session_resumable
+              (i18n "discord_chat_bridge.admin.resumable")
+              (i18n "discord_chat_bridge.admin.not_resumable")
             }}</strong>
         </div>
         <div>
@@ -296,6 +332,21 @@ export default class DiscordChatBridgeAdmin extends Component {
               errors=this.state.summary.mapping_errors
             }}
           </strong>
+        </div>
+        <div>
+          <span class="discord-chat-bridge-status__label">{{i18n
+              "discord_chat_bridge.admin.outbound_delivery"
+            }}</span>
+          <strong
+            class={{if
+              this.state.summary.ambiguous_deliveries
+              "is-unhealthy"
+              "is-healthy"
+            }}
+          >{{i18n
+              "discord_chat_bridge.admin.ambiguous_summary"
+              count=this.state.summary.ambiguous_deliveries
+            }}</strong>
         </div>
       </div>
 
@@ -400,16 +451,20 @@ export default class DiscordChatBridgeAdmin extends Component {
                         )
                       }}</td>
                     <td>
-                      {{#if mapping.last_error_at}}
-                        <span
-                          class="is-unhealthy"
-                          title={{mapping.last_error_message}}
-                        >{{i18n "discord_chat_bridge.admin.error"}}</span>
+                      {{#if mapping.enabled}}
+                        {{#if mapping.last_error_at}}
+                          <span
+                            class="is-unhealthy"
+                            title={{mapping.last_error_message}}
+                          >{{i18n "discord_chat_bridge.admin.error"}}</span>
+                        {{else}}
+                          <span class="is-healthy">{{i18n
+                              "discord_chat_bridge.admin.ready"
+                            }}</span>
+                        {{/if}}
                       {{else}}
-                        <span class="is-healthy">{{if
-                            mapping.enabled
-                            (i18n "discord_chat_bridge.admin.ready")
-                            (i18n "discord_chat_bridge.admin.disabled")
+                        <span class="is-healthy">{{i18n
+                            "discord_chat_bridge.admin.disabled"
                           }}</span>
                       {{/if}}
                     </td>
@@ -422,6 +477,11 @@ export default class DiscordChatBridgeAdmin extends Component {
                           @disabled={{this.loading}}
                           class="btn-small"
                         />
+                        {{#if (eq this.testedMappingId mapping.id)}}
+                          <span class="is-healthy">{{i18n
+                              "discord_chat_bridge.admin.test_passed"
+                            }}</span>
+                        {{/if}}
                         <DButton
                           @action={{fn this.disableMapping mapping}}
                           @label="discord_chat_bridge.admin.delete"

@@ -5,6 +5,12 @@ RSpec.describe DiscordChatBridge::AdminController do
 
   before { sign_in(admin) }
 
+  it "serves the custom admin route on a direct page load" do
+    get "/admin/plugins/discourse-discord-chat-bridge/bridge"
+
+    expect(response.status).to eq(200)
+  end
+
   it "never returns stored bot or webhook tokens" do
     DiscordChatBridge::Credentials.bot_token = "super-secret-bot-token"
     mapping =
@@ -39,6 +45,12 @@ RSpec.describe DiscordChatBridge::AdminController do
     sign_in(Fabricate(:user))
     get "/discord-chat-bridge/admin.json"
     expect(response.status).to eq(404).or eq(403)
+  end
+
+  it "returns not found for a missing mapping" do
+    post "/discord-chat-bridge/admin/test.json", params: { mapping_id: -1 }
+
+    expect(response.status).to eq(404)
   end
 
   it "reactivates an archived mapping and verifies its stored outbound webhook" do
@@ -89,12 +101,33 @@ RSpec.describe DiscordChatBridge::AdminController do
     expect(mapping.reload.discord_channel_id).not_to eq("987654321")
   end
 
+  it "returns service unavailable when Discord cannot validate a new webhook" do
+    chat_channel = Fabricate(:chat_channel)
+    DiscordChatBridge::Discord::Client
+      .any_instance
+      .expects(:webhook)
+      .raises(DiscordChatBridge::RetryableError, "Discord connection failed")
+
+    post "/discord-chat-bridge/admin/mappings.json",
+         params: {
+           discord_guild_id: "400",
+           discord_channel_id: "200",
+           chat_channel_id: chat_channel.id,
+           direction: "discourse_to_discord",
+           enabled: true,
+           webhook_url: "https://discord.com/api/webhooks/500/webhook-token",
+         }
+
+    expect(response.status).to eq(503)
+    expect(DiscordChatBridge::ChannelMapping.where(chat_channel:)).to be_empty
+  end
+
   it "rejects a mapping test when the Discord channel belongs to another guild" do
     mapping = Fabricate(:discord_chat_bridge_channel_mapping)
     DiscordChatBridge::Discord::Client
       .any_instance
       .expects(:channel)
-      .returns({ "id" => mapping.discord_channel_id, "guild_id" => "987654321" })
+      .returns({ "id" => mapping.discord_channel_id, "guild_id" => "987654321", "type" => 0 })
 
     post "/discord-chat-bridge/admin/test.json", params: { mapping_id: mapping.id }
 
@@ -104,7 +137,27 @@ RSpec.describe DiscordChatBridge::AdminController do
     )
   end
 
-  it "tests both the bot channel and webhook for an outbound mapping" do
+  it "rejects unsupported Discord channel types for inbound mappings" do
+    chat_channel = Fabricate(:chat_channel)
+    DiscordChatBridge::Discord::Client
+      .any_instance
+      .expects(:channel)
+      .returns({ "id" => "200", "guild_id" => "400", "type" => 15 })
+
+    post "/discord-chat-bridge/admin/mappings.json",
+         params: {
+           discord_guild_id: "400",
+           discord_channel_id: "200",
+           chat_channel_id: chat_channel.id,
+           direction: "discord_to_discourse",
+           enabled: true,
+         }
+
+    expect(response.status).to eq(422)
+    expect(response.parsed_body["errors"]).to include("Discord channel type is not supported")
+  end
+
+  it "tests an outbound-only mapping without requiring bot channel access" do
     mapping =
       Fabricate(
         :discord_chat_bridge_channel_mapping,
@@ -113,13 +166,7 @@ RSpec.describe DiscordChatBridge::AdminController do
         webhook_token: "webhook-token",
       )
     client = DiscordChatBridge::Discord::Client.any_instance
-    client.expects(:channel).returns(
-      {
-        "id" => mapping.discord_channel_id,
-        "guild_id" => mapping.discord_guild_id,
-        "name" => "general",
-      },
-    )
+    client.expects(:channel).never
     client.expects(:webhook).returns(
       { "channel_id" => mapping.discord_channel_id, "guild_id" => mapping.discord_guild_id },
     )
@@ -127,5 +174,6 @@ RSpec.describe DiscordChatBridge::AdminController do
     post "/discord-chat-bridge/admin/test.json", params: { mapping_id: mapping.id }
 
     expect(response.status).to eq(200)
+    expect(response.parsed_body.dig("channel", "id")).to eq(mapping.discord_channel_id)
   end
 end

@@ -14,9 +14,8 @@ module DiscordChatBridge
 
       def call
         state = EventState.find(@state_id)
-        DistributedMutex.synchronize(lock_key(state), validity: 5.minutes) do
-          reconcile(state.reload)
-        end
+        state.increment!(:processing_attempts)
+        reconcile(state.reload)
       rescue => error
         EventState.where(id: @state_id).update_all(last_error: error.message.to_s.first(500))
         raise
@@ -26,16 +25,34 @@ module DiscordChatBridge
 
       def reconcile(state)
         mapping = ChannelMapping.active.find_by(discord_channel_id: state.discord_channel_id)
-        return unless mapping&.inbound?
+        unless mapping&.inbound?
+          state.update!(processed_at: Time.zone.now, last_error: nil)
+          return
+        end
 
         message_mapping =
           MessageMapping.find_by(
             discord_channel_id: state.discord_channel_id,
             discord_message_id: state.discord_message_id,
           )
+        if message_mapping && message_mapping.channel_mapping_id != mapping.id
+          state.update!(processed_at: Time.zone.now, last_error: nil)
+          return
+        end
+        if message_mapping.blank? && event_predates_mapping?(state, mapping)
+          state.update!(processed_at: Time.zone.now, last_error: nil)
+          return
+        end
 
-        if message_mapping&.origin == "discourse" ||
-             message_mapping&.deleted_on_discourse_at.present?
+        if message_mapping&.origin == "discourse"
+          if state.discord_deleted_at && message_mapping.deleted_on_discord_at.blank?
+            message_mapping.update!(deleted_on_discord_at: state.discord_deleted_at)
+          end
+          state.update!(processed_at: Time.zone.now, last_error: nil)
+          return
+        end
+
+        if message_mapping&.deleted_on_discourse_at.present?
           state.update!(processed_at: Time.zone.now, last_error: nil)
           return
         end
@@ -44,7 +61,10 @@ module DiscordChatBridge
           delete_message(message_mapping, state)
         else
           payload = complete_payload(state)
-          return unless message_mapping || Filter.accept?(payload, mapping)
+          unless message_mapping || Filter.accept?(payload, mapping)
+            state.update!(processed_at: Time.zone.now, last_error: nil)
+            return
+          end
 
           if message_mapping&.chat_message_id
             update_message(message_mapping, payload, state)
@@ -54,25 +74,31 @@ module DiscordChatBridge
         end
 
         state.update!(processed_at: Time.zone.now, last_error: nil)
-        mapping.record_success!
+        unresolved_errors =
+          EventState
+            .where(discord_channel_id: mapping.discord_channel_id, processed_at: nil)
+            .where.not(last_error: nil)
+            .exists?
+        mapping.record_success!(clear_error: !unresolved_errors)
       rescue PermanentError => error
         mapping&.record_error!(error)
-        state.update!(processed_at: Time.zone.now, last_error: error.message.to_s.first(500))
+        state.update!(processed_at: nil, last_error: error.message.to_s.first(500))
+        raise
       rescue => error
         mapping&.record_error!(error)
         raise
       end
 
       def complete_payload(state)
-        payload = state.payload.to_h
+        payload = state.payload.to_h.except("_gateway_session_generation")
         complete =
           payload.dig("author", "id").present? && payload.key?("content") &&
             payload.key?("attachments")
         return payload if !payload.delete("_fetch_required") && complete
 
         fetched = @client.message(state.discord_channel_id, state.discord_message_id)
-        Discord::EventNormalizer.call("MESSAGE_UPDATE", fetched).merge(
-          payload.slice("id", "channel_id", "guild_id"),
+        Discord::EventNormalizer.call("MESSAGE_UPDATE", fetched).deep_merge(
+          payload.except("_fetch_required"),
         )
       end
 
@@ -201,7 +227,9 @@ module DiscordChatBridge
 
       def cached_attachment_result(message_mapping, attachments)
         records = Array(message_mapping.discord_attachments)
-        unless AttachmentProcessor.signature(records) == AttachmentProcessor.signature(attachments)
+        include_url = records.any? { |record| record["upload_id"].blank? }
+        unless AttachmentProcessor.signature(records, include_url:) ==
+                 AttachmentProcessor.signature(attachments, include_url:)
           return
         end
 
@@ -222,8 +250,9 @@ module DiscordChatBridge
         nil
       end
 
-      def lock_key(state)
-        "discord_chat_bridge:message:#{state.discord_channel_id}:#{state.discord_message_id}"
+      def event_predates_mapping?(state, mapping)
+        event_time = parse_time(state.payload["timestamp"])
+        event_time.present? && event_time < mapping.activated_at
       end
     end
   end

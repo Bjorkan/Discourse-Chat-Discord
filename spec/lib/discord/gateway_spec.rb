@@ -42,6 +42,49 @@ RSpec.describe DiscordChatBridge::Discord::Gateway do
     gateway.send(:resume)
   end
 
+  it "answers a requested heartbeat without invalidating the scheduled heartbeat ACK" do
+    websocket = mock
+    gateway.instance_variable_set(:@websocket, websocket)
+    gateway.instance_variable_set(:@heartbeat_acknowledged, true)
+    gateway.instance_variable_set(:@session, { "sequence" => 42 })
+    websocket
+      .expects(:send)
+      .with do |json|
+        payload = JSON.parse(json)
+        payload == { "op" => 1, "d" => 42 }
+      end
+
+    gateway.send(:handle_payload, { "op" => 1 })
+
+    expect(gateway.instance_variable_get(:@heartbeat_acknowledged)).to eq(true)
+  end
+
+  it "serializes payloads sent by concurrent Gateway threads" do
+    state_mutex = Mutex.new
+    active_sends = 0
+    maximum_active_sends = 0
+    sent_payloads = []
+    websocket = Object.new
+    websocket.define_singleton_method(:send) do |payload|
+      state_mutex.synchronize do
+        active_sends += 1
+        maximum_active_sends = [maximum_active_sends, active_sends].max
+      end
+      sleep 0.02
+      state_mutex.synchronize do
+        sent_payloads << JSON.parse(payload)
+        active_sends -= 1
+      end
+    end
+    gateway.instance_variable_set(:@websocket, websocket)
+
+    threads = 2.times.map { |index| Thread.new { gateway.send(:send_payload, op: 1, d: index) } }
+    threads.each(&:join)
+
+    expect(maximum_active_sends).to eq(1)
+    expect(sent_payloads).to contain_exactly({ "op" => 1, "d" => 0 }, { "op" => 1, "d" => 1 })
+  end
+
   it "uses the resume URL for a resumable session" do
     gateway.instance_variable_set(
       :@session,
@@ -53,6 +96,33 @@ RSpec.describe DiscordChatBridge::Discord::Gateway do
     )
 
     expect(gateway.send(:gateway_url)).to eq("wss://resume.discord.gg?v=10&encoding=json")
+  end
+
+  it "stops before identifying when Discord requires sharding" do
+    client.stubs(:gateway_bot).returns({ "url" => "wss://gateway.discord.gg", "shards" => 2 })
+
+    expect { gateway.send(:gateway_url) }.to raise_error(
+      DiscordChatBridge::PermanentError,
+      "Discord requires 2 Gateway shards, which this bridge does not support",
+    )
+  end
+
+  it "waits for Discord's session start budget to reset" do
+    client.stubs(:gateway_bot).returns(
+      {
+        "url" => "wss://gateway.discord.gg",
+        "shards" => 1,
+        "session_start_limit" => {
+          "remaining" => 0,
+          "reset_after" => 120_000,
+        },
+      },
+    )
+
+    expect { gateway.send(:gateway_url) }.to raise_error do |error|
+      expect(error).to be_a(DiscordChatBridge::RetryableError)
+      expect(error.retry_after).to eq(120)
+    end
   end
 
   it "rejects unsafe Gateway and resume URLs" do
@@ -79,6 +149,47 @@ RSpec.describe DiscordChatBridge::Discord::Gateway do
 
     expect(gateway.instance_variable_get(:@closed)).to eq(true)
     expect(gateway.instance_variable_get(:@fatal_error)).to be_a(DiscordChatBridge::RetryableError)
+  end
+
+  it "reports connected only after Discord sends READY" do
+    callbacks = {}
+    websocket = Object.new
+    websocket.define_singleton_method(:on) { |event, &callback| callbacks[event] = callback }
+    DiscordChatBridge::Health.update_gateway(
+      connected: false,
+      connecting: true,
+      websocket_open: false,
+    )
+    gateway.send(:register_callbacks, websocket)
+
+    callbacks.fetch(:open).call
+
+    expect(DiscordChatBridge::Health.gateway).to include(
+      "connected" => false,
+      "connecting" => true,
+      "websocket_open" => true,
+    )
+
+    gateway.send(
+      :handle_dispatch,
+      {
+        "t" => "READY",
+        "d" => {
+          "session_id" => "session",
+          "resume_gateway_url" => "wss://resume.discord.gg",
+          "user" => {
+            "id" => "bot-user",
+          },
+        },
+      },
+    )
+
+    expect(DiscordChatBridge::Health.gateway).to include(
+      "connected" => true,
+      "connecting" => false,
+      "websocket_open" => true,
+      "bot_user_id" => "bot-user",
+    )
   end
 
   it "does not let a health write failure mask shutdown" do

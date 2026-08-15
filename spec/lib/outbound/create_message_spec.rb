@@ -57,6 +57,14 @@ RSpec.describe DiscordChatBridge::Outbound::CreateMessage do
     expect(DiscordChatBridge::MessageMapping.last.delivery_status).to eq("ambiguous")
   end
 
+  it "keeps the delivery retryable when the client fails before starting the request" do
+    client.expects(:execute_webhook).raises("local client failure")
+
+    expect { described_class.new(message.id, client:).call }.to raise_error("local client failure")
+
+    expect(DiscordChatBridge::MessageMapping.last.delivery_status).to eq("pending")
+  end
+
   it "skips Discord-origin messages and the technical actor" do
     ensure_bridge_actor
     external =
@@ -94,6 +102,42 @@ RSpec.describe DiscordChatBridge::Outbound::CreateMessage do
         content.include?(
           "https://discord.com/channels/400/200/#{parent_mapping.discord_message_id}",
         ) && !args[:payload].key?(:message_reference)
+      end
+      .returns({ "id" => "602", "attachments" => [] })
+
+    described_class.new(reply.id, client:).call
+  end
+
+  it "links replies using the parent message's historical Discord channel" do
+    parent = Fabricate(:chat_message, chat_channel:, user:, message: "Original text")
+    Fabricate(
+      :discord_chat_bridge_message_mapping,
+      channel_mapping: mapping,
+      chat_message: parent,
+      discord_message_id: "601",
+      discord_channel_id: "200",
+      discourse_chat_channel_id: chat_channel.id,
+      origin: "discourse",
+    )
+    mapping.update!(enabled: false, archived_at: Time.zone.now)
+    replacement_mapping =
+      Fabricate.build(
+        :discord_chat_bridge_channel_mapping,
+        chat_channel:,
+        direction: "discourse_to_discord",
+        discord_channel_id: "201",
+        discord_guild_id: "401",
+        discord_webhook_id: "501",
+      )
+    replacement_mapping.webhook_token = "replacement-secret"
+    replacement_mapping.save!
+    reply = Fabricate(:chat_message, chat_channel:, user:, in_reply_to: parent, message: "Reply")
+
+    client
+      .expects(:execute_webhook)
+      .with do |args|
+        args[:webhook_id] == "501" &&
+          args.dig(:payload, :content).include?("https://discord.com/channels/400/200/601")
       end
       .returns({ "id" => "602", "attachments" => [] })
 

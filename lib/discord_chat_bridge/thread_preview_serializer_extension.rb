@@ -14,18 +14,40 @@ module DiscordChatBridge
 
       users = original_users.reject { |user| user.id == BRIDGE_USER_ID }
       available_slots = [MAX_PARTICIPANTS - users.length, 0].max
+      scope = external_participant_scope
+      identity_ids =
+        scope
+          .group(:discord_identity_id)
+          .order(Arel.sql("MAX(chat_messages.created_at) DESC"))
+          .limit(available_slots)
+          .pluck(:discord_identity_id)
+      latest_mappings =
+        scope
+          .where(discord_identity_id: identity_ids)
+          .select(
+            "DISTINCT ON (discord_chat_bridge_message_mappings.discord_identity_id) " \
+              "discord_chat_bridge_message_mappings.*",
+          )
+          .reorder("discord_identity_id, chat_messages.created_at DESC")
+          .preload(:discord_identity)
+          .index_by(&:discord_identity_id)
       external_participants =
-        MessageMapping
-          .includes(:discord_identity)
-          .joins(:chat_message)
-          .where(chat_messages: { thread_id: object.id, deleted_at: nil }, origin: "discord")
-          .where.not(discord_identity_id: nil)
-          .order("chat_messages.created_at DESC")
-          .limit(MAX_PARTICIPANTS)
-          .filter_map { |mapping| external_user_for_mapping(mapping) }
-          .uniq(&:id)
-          .first(available_slots)
+        identity_ids.filter_map do |identity_id|
+          external_user_for_mapping(latest_mappings[identity_id])
+        end
       users + external_participants
+    end
+
+    def participant_count
+      count = super
+      participants = @participants&.dig(:users) || []
+      contains_bridge_actor =
+        participants.any? do |participant|
+          (participant[:id] || participant["id"]).to_i == BRIDGE_USER_ID
+        end
+      return count unless contains_bridge_actor
+
+      count - 1 + external_participant_scope.distinct.count(:discord_identity_id)
     end
 
     private
@@ -45,6 +67,13 @@ module DiscordChatBridge
         name: mapping.author_display_name.presence || identity.display_name,
         avatar_template: identity.avatar_template,
       )
+    end
+
+    def external_participant_scope
+      MessageMapping
+        .joins(:chat_message)
+        .where(chat_messages: { thread_id: object.id, deleted_at: nil }, origin: "discord")
+        .where.not(discord_identity_id: nil)
     end
   end
 end

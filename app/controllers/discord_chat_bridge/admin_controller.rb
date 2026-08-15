@@ -22,20 +22,33 @@ module DiscordChatBridge
         unless Chat::Channel.exists?(mapping.chat_channel_id)
           raise ArgumentError, "Discourse Chat channel no longer exists"
         end
-        channel = Discord::Client.new.channel(mapping.discord_channel_id)
-        validate_remote_guild!(channel, mapping)
+        client = Discord::Client.new
+        channel = nil
+        if mapping.inbound?
+          channel = client.channel(mapping.discord_channel_id)
+          validate_remote_channel!(channel, mapping)
+        end
+        webhook = nil
         if mapping.outbound?
           unless mapping.webhook_configured?
             raise ArgumentError, "Discord webhook is not configured"
           end
-          validate_remote_webhook!(mapping)
+          webhook = validate_remote_webhook!(mapping, client:)
         end
-        render json: { ok: true, channel: { id: channel["id"], name: channel["name"] } }
+        render json: {
+                 ok: true,
+                 channel: {
+                   id: channel&.dig("id") || webhook&.dig("channel_id"),
+                   name: channel&.dig("name"),
+                 },
+               }
         return
       end
 
       bot = Discord::Client.new.current_user
       render json: { ok: true, bot: { id: bot["id"], username: bot["username"] } }
+    rescue ActiveRecord::RecordNotFound => error
+      render_json_error safe_error(error), status: 404
     rescue => error
       render_json_error safe_error(error), status: 422
     end
@@ -50,6 +63,9 @@ module DiscordChatBridge
       apply_webhook(mapping)
       mapping.activated_at = Time.zone.now
       raise ActiveRecord::RecordInvalid, mapping unless mapping.valid?
+      if mapping.inbound?
+        validate_remote_channel!(Discord::Client.new.channel(mapping.discord_channel_id), mapping)
+      end
       validate_remote_webhook!(mapping) if mapping.webhook_configured?
       mapping.save!
       render json: { mapping: serialize_mapping(mapping) }
@@ -58,6 +74,8 @@ module DiscordChatBridge
            ArgumentError,
            PermanentError => error
       render_json_error safe_error(error), status: 422
+    rescue RetryableError => error
+      render_json_error safe_error(error), status: 503
     end
 
     def update_mapping
@@ -70,22 +88,31 @@ module DiscordChatBridge
         raise ActiveRecord::RecordInvalid, mapping unless mapping.valid?
         validate_remote_webhook!(mapping)
       end
+      if should_validate_channel?(mapping)
+        raise ActiveRecord::RecordInvalid, mapping unless mapping.valid?
+        validate_remote_channel!(Discord::Client.new.channel(mapping.discord_channel_id), mapping)
+      end
       mapping.activated_at = Time.zone.now if reactivating
       mapping.save!
       render json: { mapping: serialize_mapping(mapping) }
+    rescue ActiveRecord::RecordNotFound => error
+      render_json_error safe_error(error), status: 404
     rescue ActiveRecord::RecordInvalid,
-           ActiveRecord::RecordNotFound,
            ActiveRecord::RecordNotUnique,
            ArgumentError,
            PermanentError => error
       render_json_error safe_error(error), status: 422
+    rescue RetryableError => error
+      render_json_error safe_error(error), status: 503
     end
 
     def destroy_mapping
       mapping = ChannelMapping.find(params[:id])
       mapping.update!(enabled: false, archived_at: Time.zone.now)
       render json: { mapping: serialize_mapping(mapping) }
-    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound => error
+    rescue ActiveRecord::RecordNotFound => error
+      render_json_error safe_error(error), status: 404
+    rescue ActiveRecord::RecordInvalid => error
       render_json_error safe_error(error), status: 422
     end
 
@@ -115,6 +142,7 @@ module DiscordChatBridge
             "last_ready_at",
             "last_resumed_at",
             "last_heartbeat_ack_at",
+            "retry_at",
             "last_error",
             "fatal",
             "updated_at",
@@ -157,16 +185,27 @@ module DiscordChatBridge
       mapping.discord_channel_id_changed? || mapping.direction_changed? || mapping.enabled_changed?
     end
 
-    def validate_remote_webhook!(mapping)
-      webhook =
-        Discord::Client.new.webhook(
-          webhook_id: mapping.discord_webhook_id,
-          token: mapping.webhook_token,
-        )
+    def should_validate_channel?(mapping)
+      return false unless mapping.inbound?
+
+      mapping.new_record? || mapping.discord_channel_id_changed? || mapping.direction_changed? ||
+        mapping.enabled_changed?
+    end
+
+    def validate_remote_channel!(channel, mapping)
+      validate_remote_guild!(channel, mapping)
+      return if channel["type"].to_i.in?([0, 5])
+
+      raise ArgumentError, "Discord channel type is not supported"
+    end
+
+    def validate_remote_webhook!(mapping, client: Discord::Client.new)
+      webhook = client.webhook(webhook_id: mapping.discord_webhook_id, token: mapping.webhook_token)
       if webhook["channel_id"].to_s != mapping.discord_channel_id.to_s
         raise ArgumentError, "Discord webhook belongs to a different channel"
       end
       validate_remote_guild!(webhook, mapping)
+      webhook
     end
 
     def validate_remote_guild!(remote_resource, mapping)

@@ -23,7 +23,9 @@ module DiscordChatBridge
 
       def mapping
         return unless message
-        @mapping ||= ChannelMapping.active.find_by(chat_channel_id: message.chat_channel_id)
+        @mapping ||=
+          existing_message_mapping&.channel_mapping ||
+            ChannelMapping.active.find_by(chat_channel_id: message.chat_channel_id)
       end
 
       def existing_message_mapping
@@ -55,11 +57,13 @@ module DiscordChatBridge
         name =
           replied_mapping&.author_display_name.presence || replied.user&.name.presence ||
             replied.user&.username || "Unknown"
+        name = Formatting.escape_discord_link_text(name)
         excerpt = replied.build_excerpt.to_s.gsub(/\s+/, " ").first(120)
         jump =
           if replied_mapping&.discord_message_id.present? &&
                !replied_mapping.discord_message_id.start_with?("pending:")
-            "https://discord.com/channels/#{mapping.discord_guild_id}/#{mapping.discord_channel_id}/#{replied_mapping.discord_message_id}"
+            replied_channel_mapping = replied_mapping.channel_mapping
+            "https://discord.com/channels/#{replied_channel_mapping.discord_guild_id}/#{replied_channel_mapping.discord_channel_id}/#{replied_mapping.discord_message_id}"
           end
         label = jump ? "[#{name}](#{jump})" : name
         "↳ #{label}: #{excerpt}"
@@ -83,8 +87,9 @@ module DiscordChatBridge
 
       def prepare_content_and_files
         value = content
-        files = upload_files
-        if Formatting.discord_length(value) <= Formatting::DISCORD_CONTENT_LIMIT
+        content_requires_file = Formatting.discord_length(value) > Formatting::DISCORD_CONTENT_LIMIT
+        files = upload_files(max_files: MAX_DISCORD_FILES - (content_requires_file ? 1 : 0))
+        unless content_requires_file
           if value.blank? && files.empty?
             value = "(Discourse message contained no supported content)"
           end
@@ -95,7 +100,6 @@ module DiscordChatBridge
         tempfile.binmode
         tempfile.write(value)
         tempfile.rewind
-        cleanup_files([files.pop]) if files.length == 10
         files << {
           io: tempfile,
           filename: "message.txt",
@@ -107,44 +111,55 @@ module DiscordChatBridge
         ["#{Formatting.truncate_for_discord(value, preview_limit)}#{suffix}", files]
       end
 
-      def upload_files
+      def upload_files(max_files: MAX_DISCORD_FILES)
         max_bytes = SiteSetting.discord_chat_bridge_max_attachment_mb.megabytes
-        message
-          .uploads
-          .each_with_object([]) do |upload, files|
-            break files if files.length >= MAX_DISCORD_FILES
-            next if upload.filesize.to_i > max_bytes
-            source_path =
-              Discourse.store.path_for(upload) ||
-                Discourse.store.download(
-                  upload,
-                  # Despite its historical name, this Discourse API expects a byte count.
-                  max_file_size_kb: max_bytes,
-                )
-            next if source_path.blank? || !File.file?(source_path)
+        uploads = message.uploads.to_a
+        if uploads.length > max_files
+          raise PermanentError, "Discord accepts at most #{max_files} files for this message"
+        end
+        if uploads.sum { |upload| upload.filesize.to_i } > max_bytes
+          raise PermanentError, "Attachments exceed the configured total Discord upload limit"
+        end
 
-            tempfile =
-              Tempfile.new(["discord-outbound", File.extname(upload.original_filename.to_s)])
-            tempfile.binmode
-            File.open(source_path, "rb") do |source|
-              IO.copy_stream(source, tempfile, max_bytes + 1)
-            end
-            if tempfile.size > max_bytes
-              tempfile.close!
-              next
-            end
-            tempfile.rewind
-            files << {
-              io: tempfile,
-              filename: File.basename(upload.original_filename.to_s).presence || "attachment",
-              content_type: upload.content_type.presence || "application/octet-stream",
-              temporary: true,
-            }
-          rescue => error
-            Rails.logger.warn(
-              "#{Log.prefix(operation: "attachment", direction: "outbound", chat_message_id: message.id)} result=skipped error_class=#{error.class}",
-            )
+        files = []
+        uploads.each do |upload|
+          if upload.filesize.to_i > max_bytes
+            raise PermanentError,
+                  "Attachment #{upload.id} exceeds the configured Discord attachment limit"
           end
+          source_path =
+            Discourse.store.path_for(upload) ||
+              Discourse.store.download(
+                upload,
+                # Despite its historical name, this Discourse API expects a byte count.
+                max_file_size_kb: max_bytes,
+              )
+          unless source_path.present? && File.file?(source_path)
+            raise RetryableError, "Attachment #{upload.id} is temporarily unavailable"
+          end
+
+          tempfile = Tempfile.new(["discord-outbound", File.extname(upload.original_filename.to_s)])
+          tempfile.binmode
+          files << {
+            io: tempfile,
+            filename: File.basename(upload.original_filename.to_s).presence || "attachment",
+            content_type: upload.content_type.presence || "application/octet-stream",
+            temporary: true,
+          }
+          File.open(source_path, "rb") { |source| IO.copy_stream(source, tempfile, max_bytes + 1) }
+          if tempfile.size > max_bytes
+            raise PermanentError,
+                  "Attachment #{upload.id} exceeds the configured Discord attachment limit"
+          end
+          tempfile.rewind
+        end
+        files
+      rescue PermanentError, RetryableError
+        cleanup_files(files || [])
+        raise
+      rescue => error
+        cleanup_files(files || [])
+        raise RetryableError, "Discourse attachment preparation failed: #{error.class}"
       end
 
       def cleanup_files(files)

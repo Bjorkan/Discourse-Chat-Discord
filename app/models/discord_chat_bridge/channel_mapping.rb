@@ -35,6 +35,7 @@ module DiscordChatBridge
     validate :webhook_present_for_outbound
     validate :webhook_credentials_are_complete
     validate :enabled_mapping_is_not_archived
+    validate :chat_channel_is_public
     validate :endpoints_are_immutable_after_messages_exist, on: :update
 
     scope :active, -> { where(enabled: true, archived_at: nil) }
@@ -60,13 +61,12 @@ module DiscordChatBridge
       self.encrypted_discord_webhook_token = token.present? ? Encryption.encrypt(token) : nil
     end
 
-    def record_success!
-      update_columns(
-        last_success_at: Time.zone.now,
-        last_error_at: nil,
-        last_error_code: nil,
-        last_error_message: nil,
-      )
+    def record_success!(clear_error: true)
+      values = { last_success_at: Time.zone.now }
+      if clear_error
+        values.merge!(last_error_at: nil, last_error_code: nil, last_error_message: nil)
+      end
+      update_columns(values)
     end
 
     def record_error!(error)
@@ -103,6 +103,12 @@ module DiscordChatBridge
     def enabled_mapping_is_not_archived
       if enabled? && archived_at
         errors.add(:archived_at, "must be blank while the mapping is enabled")
+      end
+    end
+
+    def chat_channel_is_public
+      if chat_channel&.direct_message_channel?
+        errors.add(:chat_channel, "must be a public category channel")
       end
     end
 

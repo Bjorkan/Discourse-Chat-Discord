@@ -34,7 +34,11 @@ module DiscordChatBridge
 
       def release
         @renewal&.kill
-        Discourse.redis.eval(RELEASE_SCRIPT, keys: [KEY], argv: [@token])
+        Discourse.redis.eval(
+          RELEASE_SCRIPT,
+          keys: [Discourse.redis.namespace_key(KEY)],
+          argv: [@token],
+        )
       rescue => error
         Rails.logger.warn(
           "#{Log.prefix(operation: "lease_release", direction: "gateway")} error_class=#{error.class}",
@@ -48,7 +52,12 @@ module DiscordChatBridge
           Thread.new do
             loop do
               sleep RENEW_EVERY
-              renewed = Discourse.redis.eval(RENEW_SCRIPT, keys: [KEY], argv: [@token, TTL_MS])
+              renewed =
+                Discourse.redis.eval(
+                  RENEW_SCRIPT,
+                  keys: [Discourse.redis.namespace_key(KEY)],
+                  argv: [@token, TTL_MS],
+                )
               unless renewed == 1
                 @lost = true
                 break

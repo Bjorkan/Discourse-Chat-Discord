@@ -40,13 +40,14 @@ module DiscordChatBridge
         request(:get, "/webhooks/#{snowflake!(webhook_id)}/#{webhook_token!(token)}")
       end
 
-      def execute_webhook(webhook_id:, token:, payload:, files: [])
+      def execute_webhook(webhook_id:, token:, payload:, files: [], &on_request_started)
         request(
           :post,
           "/webhooks/#{snowflake!(webhook_id)}/#{webhook_token!(token)}?wait=true",
           payload:,
           files:,
           ambiguous_delivery: true,
+          on_request_started:,
         )
       end
 
@@ -76,7 +77,8 @@ module DiscordChatBridge
         files: [],
         auth: false,
         allow_not_found: false,
-        ambiguous_delivery: false
+        ambiguous_delivery: false,
+        on_request_started: nil
       )
         raise PermanentError, "Discord bot token is not configured" if auth && @token.blank?
 
@@ -88,7 +90,7 @@ module DiscordChatBridge
           loop do
             attempts += 1
             @rate_limiter.before_request(route_key)
-            response = perform(method, uri, payload:, files:, auth:)
+            response = perform(method, uri, payload:, files:, auth:, on_request_started:)
             @rate_limiter.update(route_key, response)
             body = parse_body(response)
 
@@ -140,7 +142,7 @@ module DiscordChatBridge
         end
       end
 
-      def perform(method, uri, payload:, files:, auth:)
+      def perform(method, uri, payload:, files:, auth:, on_request_started: nil)
         request_class = Net::HTTP.const_get(method.to_s.capitalize)
         request = request_class.new(uri)
         request["Authorization"] = "Bot #{@token}" if auth
@@ -169,7 +171,10 @@ module DiscordChatBridge
           open_timeout: CONNECT_TIMEOUT,
           read_timeout: READ_TIMEOUT,
           write_timeout: READ_TIMEOUT,
-        ) { |http| http.request(request) }
+        ) do |http|
+          on_request_started&.call
+          http.request(request)
+        end
       end
 
       def parse_body(response)

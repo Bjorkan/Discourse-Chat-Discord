@@ -9,6 +9,7 @@ RSpec.describe DiscordChatBridge::GatewayDemon do
     SiteSetting.discord_chat_bridge_gateway_autostart = true
     DiscordChatBridge::Credentials.stubs(:bot_token?).returns(true)
     DiscordChatBridge::DiscourseIntegration.stubs(:compatible?).returns(true)
+    RailsMultisite::ConnectionManagement.stubs(:all_dbs).returns(["default"])
   end
 
   it "runs only when Chat and an inbound mapping are available" do
@@ -30,5 +31,40 @@ RSpec.describe DiscordChatBridge::GatewayDemon do
     relation.expects(:any?).once.returns(true)
 
     2.times { expect(demon.send(:runnable?)).to eq(true) }
+  end
+
+  it "does not retry a permanent Gateway failure until reconnect is requested" do
+    Fabricate(:discord_chat_bridge_channel_mapping, direction: "discord_to_discourse")
+    lease = mock
+    lease.expects(:acquire).returns(true)
+    lease.expects(:release)
+    DiscordChatBridge::Discord::LeaderLease.expects(:new).returns(lease)
+
+    gateway = mock
+    gateway.expects(:run).raises(DiscordChatBridge::PermanentError, "invalid token")
+    DiscordChatBridge::Discord::Gateway.expects(:new).returns(gateway)
+    DiscordChatBridge::Health.expects(:reconnect_request).twice.returns("before", "after")
+
+    demon.send(:run_cycle)
+
+    expect(DiscordChatBridge::Health.gateway).to include(
+      "connected" => false,
+      "connecting" => false,
+      "fatal" => true,
+      "last_error" => "invalid token",
+    )
+  end
+
+  it "stops with an explicit error on multisite installations" do
+    RailsMultisite::ConnectionManagement.stubs(:all_dbs).returns(%w[default second])
+    demon.expects(:wait_until_stopping).with(30)
+
+    demon.send(:run_cycle)
+
+    expect(DiscordChatBridge::Health.gateway).to include(
+      "connected" => false,
+      "fatal" => true,
+      "last_error" => "Discord Chat Bridge Gateway does not support multisite installations",
+    )
   end
 end
