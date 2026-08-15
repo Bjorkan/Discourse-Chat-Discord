@@ -5,6 +5,12 @@ RSpec.describe DiscordChatBridge::AdminController do
 
   before { sign_in(admin) }
 
+  it "serves the custom admin route on a direct page load" do
+    get "/admin/plugins/discourse-discord-chat-bridge/bridge"
+
+    expect(response.status).to eq(200)
+  end
+
   it "never returns stored bot or webhook tokens" do
     DiscordChatBridge::Credentials.bot_token = "super-secret-bot-token"
     mapping =

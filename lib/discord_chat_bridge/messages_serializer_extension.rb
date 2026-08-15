@@ -4,9 +4,18 @@ module DiscordChatBridge
   module MessagesSerializerExtension
     def messages
       bridge_messages =
-        object.messages.flat_map do |message|
-          [message, message.in_reply_to, message.thread&.original_message, message.thread&.last_message]
-        end.compact.uniq(&:id)
+        object
+          .messages
+          .flat_map do |message|
+            [
+              message,
+              message.in_reply_to,
+              message.thread&.original_message,
+              message.thread&.last_message,
+            ]
+          end
+          .compact
+          .uniq(&:id)
       ActiveRecord::Associations::Preloader.new(
         records: bridge_messages,
         associations: {

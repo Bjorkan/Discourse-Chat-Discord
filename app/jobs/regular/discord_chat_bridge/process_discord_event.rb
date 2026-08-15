@@ -78,9 +78,7 @@ module Jobs
           end
           if @gateway_session_generation
             state.payload =
-              state.payload.merge(
-                "_gateway_session_generation" => @gateway_session_generation,
-              )
+              state.payload.merge("_gateway_session_generation" => @gateway_session_generation)
           end
           state.latest_event_type = event_type
           state.gateway_sequence = incoming_sequence if incoming_sequence

@@ -87,8 +87,7 @@ module DiscordChatBridge
 
       def prepare_content_and_files
         value = content
-        content_requires_file =
-          Formatting.discord_length(value) > Formatting::DISCORD_CONTENT_LIMIT
+        content_requires_file = Formatting.discord_length(value) > Formatting::DISCORD_CONTENT_LIMIT
         files = upload_files(max_files: MAX_DISCORD_FILES - (content_requires_file ? 1 : 0))
         unless content_requires_file
           if value.blank? && files.empty?
@@ -139,8 +138,7 @@ module DiscordChatBridge
             raise RetryableError, "Attachment #{upload.id} is temporarily unavailable"
           end
 
-          tempfile =
-            Tempfile.new(["discord-outbound", File.extname(upload.original_filename.to_s)])
+          tempfile = Tempfile.new(["discord-outbound", File.extname(upload.original_filename.to_s)])
           tempfile.binmode
           files << {
             io: tempfile,

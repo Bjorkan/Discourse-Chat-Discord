@@ -19,7 +19,7 @@ module DiscordChatBridgeSpecHelper
       "guild_id" => "400",
       "type" => 0,
       "content" => content,
-      "timestamp" => Time.zone.now.iso8601,
+      "timestamp" => Time.zone.now.iso8601(6),
       "edited_timestamp" => nil,
       "author" => {
         "id" => user_id,

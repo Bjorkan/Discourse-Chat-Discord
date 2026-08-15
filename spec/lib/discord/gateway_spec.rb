@@ -78,10 +78,7 @@ RSpec.describe DiscordChatBridge::Discord::Gateway do
     end
     gateway.instance_variable_set(:@websocket, websocket)
 
-    threads =
-      2.times.map do |index|
-        Thread.new { gateway.send(:send_payload, op: 1, d: index) }
-      end
+    threads = 2.times.map { |index| Thread.new { gateway.send(:send_payload, op: 1, d: index) } }
     threads.each(&:join)
 
     expect(maximum_active_sends).to eq(1)
@@ -102,9 +99,7 @@ RSpec.describe DiscordChatBridge::Discord::Gateway do
   end
 
   it "stops before identifying when Discord requires sharding" do
-    client.stubs(:gateway_bot).returns(
-      { "url" => "wss://gateway.discord.gg", "shards" => 2 },
-    )
+    client.stubs(:gateway_bot).returns({ "url" => "wss://gateway.discord.gg", "shards" => 2 })
 
     expect { gateway.send(:gateway_url) }.to raise_error(
       DiscordChatBridge::PermanentError,

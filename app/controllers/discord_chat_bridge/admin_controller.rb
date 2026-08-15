@@ -63,8 +63,9 @@ module DiscordChatBridge
       apply_webhook(mapping)
       mapping.activated_at = Time.zone.now
       raise ActiveRecord::RecordInvalid, mapping unless mapping.valid?
-      validate_remote_channel!(Discord::Client.new.channel(mapping.discord_channel_id), mapping) if
-        mapping.inbound?
+      if mapping.inbound?
+        validate_remote_channel!(Discord::Client.new.channel(mapping.discord_channel_id), mapping)
+      end
       validate_remote_webhook!(mapping) if mapping.webhook_configured?
       mapping.save!
       render json: { mapping: serialize_mapping(mapping) }
@@ -199,11 +200,7 @@ module DiscordChatBridge
     end
 
     def validate_remote_webhook!(mapping, client: Discord::Client.new)
-      webhook =
-        client.webhook(
-          webhook_id: mapping.discord_webhook_id,
-          token: mapping.webhook_token,
-        )
+      webhook = client.webhook(webhook_id: mapping.discord_webhook_id, token: mapping.webhook_token)
       if webhook["channel_id"].to_s != mapping.discord_channel_id.to_s
         raise ArgumentError, "Discord webhook belongs to a different channel"
       end

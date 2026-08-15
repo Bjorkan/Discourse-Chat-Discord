@@ -75,8 +75,9 @@ module DiscordChatBridge
 
         state.update!(processed_at: Time.zone.now, last_error: nil)
         unresolved_errors =
-          EventState.where(discord_channel_id: mapping.discord_channel_id, processed_at: nil).where
-            .not(last_error: nil)
+          EventState
+            .where(discord_channel_id: mapping.discord_channel_id, processed_at: nil)
+            .where.not(last_error: nil)
             .exists?
         mapping.record_success!(clear_error: !unresolved_errors)
       rescue PermanentError => error
@@ -253,7 +254,6 @@ module DiscordChatBridge
         event_time = parse_time(state.payload["timestamp"])
         event_time.present? && event_time < mapping.activated_at
       end
-
     end
   end
 end

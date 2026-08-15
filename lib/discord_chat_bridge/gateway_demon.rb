@@ -132,8 +132,10 @@ module DiscordChatBridge
     def wait_until_fatal_cleared(previous_reconnect_request)
       until @stopping || !runnable?
         current_reconnect_request = Health.reconnect_request
-        break if current_reconnect_request.present? &&
-          current_reconnect_request != previous_reconnect_request
+        if current_reconnect_request.present? &&
+             current_reconnect_request != previous_reconnect_request
+          break
+        end
 
         wait_until_stopping(1)
       end

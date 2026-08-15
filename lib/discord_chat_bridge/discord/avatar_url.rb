@@ -15,8 +15,10 @@ module DiscordChatBridge
           uri.is_a?(URI::HTTPS) && uri.host == HOST && uri.userinfo.nil? && uri.port == 443 &&
             uri.fragment.nil?
         safe_origin &&
-          ((uri.path.match?(CUSTOM_PATH) && uri.query == "size=128") ||
-            (uri.path.match?(DEFAULT_PATH) && uri.query.nil?))
+          (
+            (uri.path.match?(CUSTOM_PATH) && uri.query == "size=128") ||
+              (uri.path.match?(DEFAULT_PATH) && uri.query.nil?)
+          )
       rescue URI::InvalidURIError
         false
       end
